@@ -86,7 +86,8 @@ svg.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:
 .okmark{width:28px;height:28px;border-radius:50%;border:2px solid var(--ok);color:var(--ok);display:grid;place-items:center;font-size:16px;margin-top:6px}
 .rev{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px}
 .rev > svg.i{font-size:36px;color:#C9D0D8}
-.rev .v{font-size:32px;font-weight:700;line-height:1.1}
+.rev .v{font-size:30px;font-weight:700;line-height:1.1;white-space:nowrap}
+.rev > div{min-width:0}
 .rev .spark{width:120px;height:52px}
 .rev-note{font-size:15px;color:var(--muted)}
 
@@ -618,12 +619,12 @@ function operatorView(){
         <b>${s.label}</b><span>${s.time}</span>${done ? "<em>✓ готово</em>" : ""}</button>`; }).join("")}</div>
   </div>
   <form class="card" data-submit="report" novalidate>
-    ${existing ? `<div class="msg ok">Сводка «${slot.label}» уже отправлена в ${timeStr(new Date(existing.at))}: ${fmt(existing.value,1)} л${morning ? ` за сутки, касса ${fmt(existing.cash)} ₽, в бочке ${fmt(existing.tank)} л` : " с 8:00"}. Если ошиблись — отправьте ещё раз с правильными цифрами.</div>` : ""}
+    ${existing ? `<div class="msg ok">Сводка «${slot.label}» уже отправлена в ${timeStr(new Date(existing.at))}: ${fmt(existing.value,1)} л${morning ? ` за сутки, касса ${fmt(existing.cash)} ₽, безнал ${fmt(existing.card)} ₽, в бочке ${fmt(existing.tank)} л` : " с 8:00"}. Если ошиблись — отправьте ещё раз с правильными цифрами.</div>` : ""}
     ${morning
       ? fld("liters", "Продано литров за сутки", "Цифра смены на колонке перед обнулением: с 8:00 вчера до 8:00 сегодня.") + prevLine
       : fld("liters", "Продано литров с 8:00", "Цифра смены на колонке после утреннего обнуления.") + prevLine}
     <div id="calc">${calcHtml(b, morning)}</div>
-    ${morning ? fld("tank", "Остаток газа в бочке, л", "По уровнемеру на бочке.") + fld("cash", "Деньги в кассе, ₽", "Вся сумма, которая сейчас в кассе.") : ""}
+    ${morning ? fld("tank", "Остаток газа в бочке, л", "По уровнемеру на бочке.") + fld("cash", "Деньги в кассе, ₽", "Вся сумма, которая сейчас в кассе.") + fld("card", "Безнал за сутки, ₽", "Сколько прошло по терминалу (эквайринг) с 8:00 вчера до 8:00 сегодня.") : ""}
     ${S.err ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}
     <button type="submit" class="btn btn-main" ${S.busy ? "disabled" : ""}>${S.busy ? "Отправляю…" : S.confirm === "big" ? "Да, всё верно — отправить" : `${IC.send} Отправить сводку «${slot.label}»`}</button>
   </form>
@@ -662,7 +663,7 @@ function flashView(st){
   const f = S.flash;
   const title = f.type === "report" ? "Сводка отправлена" : "Привоз записан";
   const line = f.type === "report"
-    ? (f.morning ? `За сутки продано <b class="num">${fmt(f.liters,1)} л</b><br>В кассе <b class="num">${fmt(f.cash)} ₽</b>` : `С 8:00 продано <b class="num">${fmt(f.liters,1)} л</b>`)
+    ? (f.morning ? `За сутки продано <b class="num">${fmt(f.liters,1)} л</b><br>В кассе <b class="num">${fmt(f.cash)} ₽</b><br>Безнал <b class="num">${fmt(f.card)} ₽</b>` : `С 8:00 продано <b class="num">${fmt(f.liters,1)} л</b>`)
     : `В бочку добавлено <b class="num">${fmt(f.liters)} л</b>`;
   return `<div class="card done">
     <div class="check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="var(--surface)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
@@ -740,6 +741,25 @@ function dayLiters(sid, day){
   return best ? { v: best.value, closed: false } : null;
 }
 const priceOf = st => Number(st && st.price) > 0 ? Number(st.price) : null;
+const dm = key => { const [, m, d] = key.split("-"); return `${Number(d)}.${m}`; };
+/** Выручка за закрытые сутки: литры × цена и безнал из утренней сводки. */
+function closedDay(day, sid){
+  let rev = 0, card = 0, liters = 0, any = false, anyCard = false;
+  for (const st of S.stations){
+    if (sid && st.id !== sid) continue;
+    const m = findRep(st.id, shiftDate(day, 1), "08");
+    if (!m) continue;
+    any = true; liters += m.value; rev += m.value * (priceOf(st) || 0);
+    if (m.card != null){ card += m.card; anyCard = true; }
+  }
+  return any ? { rev, card: anyCard ? card : null, liters } : null;
+}
+function revLine(day, sid){
+  const c = closedDay(day, sid);
+  if (!c) return "";
+  const p = hasPrices();
+  return `Выручка за ${dm(day)}: <b class="num">${p ? fmt(Math.round(c.rev)) + " ₽" : "—"}</b>${c.card != null ? ` <span class="num">(${fmt(c.card)} безнал)</span>` : ""}`;
+}
 const hasPrices = () => S.stations.some(priceOf);
 /** Сегодня с 8:00 против вчера к тому же часу (по последней сводке каждой заправки). */
 function todayVsYesterday(){
@@ -828,6 +848,7 @@ function ownerView(){
   const revCard = prices
     ? `<div class="card"><div class="rev">${IC.coins}<div><div style="font-size:15px;color:#C9D0D8">Выручка с 8:00</div>
         <div class="v num">${fmt(Math.round(cmp.rt))} ₽</div><div>${deltaHtml(cmp.dr, "к вчера")}</div></div>${sparkline(days.map(x => x.r))}</div>
+        ${revLine(shiftDate(curWorkDay(), -1)) ? `<div class="rev-note" style="font-size:17px;color:var(--ink)">${revLine(shiftDate(curWorkDay(), -1))}</div>` : ""}
         ${anyCash ? `<div class="rev-note">Касса утром на всех заправках: <b class="num">${fmt(cash)} ₽</b></div>` : ""}</div>`
     : `<div class="card"><div class="rev">${IC.coins}<div><div style="font-size:15px;color:#C9D0D8">Выручка</div><div class="rev-note">Укажите цену литра в настройках заправки — и здесь появится выручка.</div></div><span></span></div>
         ${anyCash ? `<div class="rev-note">Касса утром на всех заправках: <b class="num">${fmt(cash)} ₽</b></div>` : ""}</div>`;
@@ -854,7 +875,7 @@ function stationsView(){
       <div class="tank-line">В бочке ≈ <b class="num">${fmt(Math.max(0, st.tank))} л</b>${pct != null ? ` · ${fmt(pct)} %` : ""}${days != null ? ` · ≈ ${days} ${daysWord(days)}` : ""} ${pct != null && pct < LOW_PCT ? `<span class="badge">Мало газа</span>` : ""}</div>
       ${gauge(st, true)}
       <div class="tank-line">${p ? `Цена <b class="num">${fmt(p, 2)} ₽/л</b> · выручка с 8:00 <b class="num">${fmt(Math.round(today * p))} ₽</b>` : "Цена литра не указана"}</div>
-      ${m ? `<div class="tank-line">Утром: бочка <b class="num">${fmt(m.tank)} л</b>${diff != null ? `, расчёт ${fmt(Math.round(m.expected))} л <span class="${Math.abs(diff) >= 50 ? "badge" : "num"}">${diff > 0 ? "+" : ""}${fmt(diff)} л</span>` : ""} · касса <b class="num">${fmt(m.cash)} ₽</b></div>` : ""}
+      ${m ? `<div class="tank-line">Утром: бочка <b class="num">${fmt(m.tank)} л</b>${diff != null ? `, расчёт ${fmt(Math.round(m.expected))} л <span class="${Math.abs(diff) >= 50 ? "badge" : "num"}">${diff > 0 ? "+" : ""}${fmt(diff)} л</span>` : ""} · касса <b class="num">${fmt(m.cash)} ₽</b>${m.card != null ? ` · безнал <b class="num">${fmt(m.card)} ₽</b>` : ""}</div>` : ""}
     </button>`;
   }).join("");
   return `${heroTitle(S.stations.length + " " + (S.stations.length === 1 ? "заправка" : S.stations.length < 5 ? "заправки" : "заправок"), "Заправки", true)}
@@ -908,6 +929,11 @@ function analyticsView(){
   const pricesOk = stList.some(priceOf);
   const tail = per === "day" ? "к вчера" : per === "week" ? "к прошлой неделе" : "к прошлому месяцу";
   const avg = nDays ? curL / nDays : null;
+  let cardSum = null, curRclosed = 0;
+  if (per !== "day"){
+    const n2 = per === "week" ? 7 : 30;
+    for (let i = n2 - 1; i >= 1; i--){ const c = closedDay(shiftDate(curWorkDay(), -i), sid); if (c){ curRclosed += c.rev; if (c.card != null) cardSum = (cardSum || 0) + c.card; } }
+  }
   let cashLast = null;
   for (const s2 of stList){ const m = stReports(s2.id).filter(r => r.slot === "08" && r.cash != null).sort((a, b) => a.date < b.date ? 1 : -1)[0]; if (m) cashLast = (cashLast || 0) + m.cash; }
   return `${heroTitle(st ? st.name : "Вся сеть", "Аналитика", true)}
@@ -918,6 +944,7 @@ function analyticsView(){
       <div><span>Продано</span><b class="num">${fmt(curL)} л<small>${deltaHtml(prevL, tail)}</small></b></div>
       <div><span>Выручка</span><b class="num">${pricesOk ? fmt(Math.round(curR)) + " ₽" : "—"}<small>${pricesOk ? deltaHtml(prevR, tail) : '<span class="cmp">укажите цену литра</span>'}</small></b></div>
       ${per !== "day" ? `<div><span>В среднем за сутки</span><b class="num">${avg != null ? fmt(Math.round(avg)) + " л" : "—"}</b></div>` : ""}
+      ${per !== "day" ? `<div><span>Безнал</span><b class="num">${cardSum != null ? fmt(cardSum) + " ₽" : "—"}${cardSum != null && pricesOk && curRclosed ? `<small><span class="cmp">${fmt(Math.round(cardSum / curRclosed * 100))} % выручки</span></small>` : ""}</b></div>` : `<div><span>Выручка за ${dm(shiftDate(curWorkDay(), -1))}</span><b class="num" style="font-size:18px">${revLine(shiftDate(curWorkDay(), -1), sid).replace(/^Выручка за [^:]+: /, "") || "—"}</b></div>`}
       <div><span>Касса (последнее утро)</span><b class="num">${cashLast != null ? fmt(cashLast) + " ₽" : "—"}</b></div>
     </div></div>
     <p class="hint" style="margin:0;font-size:14px">Выручка считается по текущей цене литра каждой заправки.</p>`;
@@ -936,7 +963,7 @@ function detailView(){
   }
   rs.filter(x => x.slot === "08").sort((a,b) => a.date < b.date ? 1 : -1).slice(0, 7).forEach(m => {
     const diff = m.diff != null ? Math.round(m.diff) : null;
-    mrows.push(`<tr><td>${esc(dayShort(m.date))}</td><td class="num">${fmt(m.tank)}</td><td class="num">${m.expected != null ? fmt(Math.round(m.expected)) : "—"}</td><td class="num${diff != null && Math.abs(diff) >= 50 ? " miss" : ""}">${diff == null ? "—" : (diff > 0 ? "+" : "") + fmt(diff)}</td><td class="num">${fmt(m.cash)}</td></tr>`);
+    mrows.push(`<tr><td>${esc(dayShort(m.date))}</td><td class="num">${fmt(m.tank)}</td><td class="num">${m.expected != null ? fmt(Math.round(m.expected)) : "—"}</td><td class="num${diff != null && Math.abs(diff) >= 50 ? " miss" : ""}">${diff == null ? "—" : (diff > 0 ? "+" : "") + fmt(diff)}</td><td class="num">${fmt(m.cash)}</td><td class="num">${m.card != null ? fmt(m.card) : "—"}</td></tr>`);
   });
   const dl = S.deliveries.filter(d => d.sid === st.id).sort((a,b) => b.at - a.at).slice(0, 8);
   const c = S.confirm;
@@ -948,7 +975,7 @@ function detailView(){
     <div class="tbl-wrap"><table><thead><tr><th>Сутки с 8:00</th><th>8–14</th><th>14–18</th><th>18–22</th><th>22–8</th><th>Всего</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>
     <div class="hint">«…» — сутки ещё не закрыты утренней сводкой.</div></div>
   <div class="card"><div class="label">Утренние сводки</div>
-    ${mrows.length ? `<div class="tbl-wrap"><table><thead><tr><th>Утро</th><th>Бочка, л</th><th>Расчёт</th><th>Разница</th><th>Касса, ₽</th></tr></thead><tbody>${mrows.join("")}</tbody></table></div>
+    ${mrows.length ? `<div class="tbl-wrap"><table><thead><tr><th>Утро</th><th>Бочка, л</th><th>Расчёт</th><th>Разница</th><th>Касса, ₽</th><th>Безнал, ₽</th></tr></thead><tbody>${mrows.join("")}</tbody></table></div>
     <div class="hint">Расчёт — сколько должно было остаться по продажам и привозам. Разница от 50 л выделена красным.</div>` : `<div class="hint">Утренних сводок пока нет.</div>`}</div>
   <div class="card"><div class="label">Привозы газа</div>
     ${dl.length ? `<div class="list">${dl.map(d => `<div><span>${esc(dayShort(dkey(new Date(d.at))))}, ${timeStr(new Date(d.at))} · <b class="num">+${fmt(d.liters)} л</b></span>
@@ -1065,7 +1092,7 @@ const A = {
   mode(d){ S.mode = d.m; S.view = "home"; S.flash = null; S.err = null; S.confirm = null; },
   pick(d){ S.sid = d.sid; lsSet("agzs.sid", d.sid); S.view = "home"; S.opSlot = null; S.form = {}; quietSync(); },
   unpick(){ S.sid = null; lsSet("agzs.sid", null); },
-  slot(d){ S.opSlot = d.slot; S.form.liters = S.form.tank = S.form.cash = ""; S.confirm = null; S.err = null; },
+  slot(d){ S.opSlot = d.slot; S.form.liters = S.form.tank = S.form.cash = S.form.card = ""; S.confirm = null; S.err = null; },
   nav(d){ S.view = d.v; S.mode = "owner"; S.err = null; S.note = null; S.confirm = null; S.form = {}; top0();
     if (d.v === "settings") return run(async () => { S.settings = await call("getSettings", S.pin); }); },
   anPer(d){ S.anPer = d.p; },
@@ -1122,7 +1149,7 @@ const SUBMIT = {
   report(){
     const st = S.stations.find(s => s.id === S.sid); if (!st) return;
     const date = workDate(), slotId = S.opSlot || autoSlot(), morning = slotId === "08";
-    const v = parseNum(S.form.liters), tank = parseNum(S.form.tank), cash = parseNum(S.form.cash);
+    const v = parseNum(S.form.liters), tank = parseNum(S.form.tank), cash = parseNum(S.form.cash), card = parseNum(S.form.card);
     if (!Number.isFinite(v) || v < 0){ S.err = morning ? "Введите, сколько литров продано за сутки." : "Введите, сколько литров продано с 8:00."; render(); return; }
     const b = shiftBounds(stReports(st.id), date, slotId);
     if (v < b.lo || (b.hi != null && v > b.hi)){ S.err = "Проверьте литры — они не сходятся с другими сводками этих суток."; render(); return; }
@@ -1130,12 +1157,13 @@ const SUBMIT = {
       if (!Number.isFinite(tank) || tank < 0){ S.err = "Введите остаток газа в бочке."; render(); return; }
       if (st.capacity && tank > st.capacity){ S.err = `Остаток больше объёма бочки (${fmt(st.capacity)} л). Проверьте цифры.`; render(); return; }
       if (!Number.isFinite(cash) || cash < 0){ S.err = "Введите, сколько денег в кассе."; render(); return; }
+      if (!Number.isFinite(card) || card < 0){ S.err = "Введите сумму безнала за сутки (0, если безнала не было)."; render(); return; }
     }
     if (v - b.lo > BIG_LITERS && S.confirm !== "big"){ S.confirm = "big"; render(); return; }
     S.confirm = null;
     return run(async () => {
-      applyState(await call("submitReport", { sid: st.id, date, slot: slotId, liters: v, tank: morning ? tank : null, cash: morning ? cash : null }));
-      S.flash = { type: "report", liters: v, cash, morning }; S.form.liters = S.form.tank = S.form.cash = ""; top0();
+      applyState(await call("submitReport", { sid: st.id, date, slot: slotId, liters: v, tank: morning ? tank : null, cash: morning ? cash : null, card: morning ? card : null }));
+      S.flash = { type: "report", liters: v, cash, card, morning }; S.form.liters = S.form.tank = S.form.cash = S.form.card = ""; top0();
     });
   },
   delivery(){
@@ -1256,7 +1284,7 @@ const Demo = {
         push(d, "14", c14, t0 + 14*3600000 + 300000);
         push(d, "18", c18, t0 + 18*3600000 + 300000);
         push(d, "22", c22, t0 + 22*3600000 + 300000);
-        if (!(i === 1 && st.id === "d2")) push(next, "08", tot, t0 + 32*3600000 + 300000, { tank: null, cash: Math.round(30000 + rnd() * 40000) });
+        if (!(i === 1 && st.id === "d2")) push(next, "08", tot, t0 + 32*3600000 + 300000, { tank: null, cash: Math.round(30000 + rnd() * 40000), card: Math.round(9000 + rnd() * 14000) });
       }
       // фактический остаток утром — расчётный плюс небольшая погрешность
       this.rep.filter(r => r.sid === st.id && r.slot === "08").sort((a,b) => a.at - b.at).forEach(r => {
@@ -1275,7 +1303,7 @@ const Demo = {
     const settings = { email: "example@gmail.com", emailOn: true, ownerPhones: 1, phones: this.st.map((s,i) => ({ name: s.name, count: i ? 0 : 2 })), sheetUrl: "", defaultPin: false, opPin: this.opPin || "704747" };
     switch (fn){
       case "getState": return this.state();
-      case "submitReport": { const p = a[0]; const key = `${p.date}_${p.slot}`; this.rep = this.rep.filter(r => !(r.sid === p.sid && r.key === key)); this.rep.push({ key, sid: p.sid, date: p.date, slot: p.slot, value: p.liters, tank: p.tank, cash: p.cash, at: Date.now() }); return this.state(); }
+      case "submitReport": { const p = a[0]; const key = `${p.date}_${p.slot}`; this.rep = this.rep.filter(r => !(r.sid === p.sid && r.key === key)); this.rep.push({ key, sid: p.sid, date: p.date, slot: p.slot, value: p.liters, tank: p.tank, cash: p.cash, card: p.card, at: Date.now() }); return this.state(); }
       case "addDelivery": this.del.push({ id: "v" + Date.now(), sid: a[0].sid, liters: a[0].liters, at: Date.now() }); return this.state();
       case "ownerLogin": return { ...settings, tok: "demo" };
       case "getSettings": case "setEmail": return settings;

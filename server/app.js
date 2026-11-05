@@ -5,7 +5,7 @@
  */
 
 /* ======== НАСТРОЙКИ ======== */
-const APP_VERSION = '05.11.2026 12:57';
+const APP_VERSION = '05.11.2026 14:30';
 const OWNER_PIN_DEFAULT = '1234';    // используется, только если PIN ещё не сохранён загрузчиком
 const OPERATOR_PIN = '704747';       // код входа для операторов (можно поменять в приложении)
 const TZ = 'Europe/Samara';          // часовой пояс заправок
@@ -27,13 +27,13 @@ const REPORT_DAYS = 70;
 const NAMES = { st: 'Заправки', rep: 'Сводки за смены', del: 'Привозы', dev: 'Устройства' };
 const HEAD = {
   st:  ['id', 'Название', 'Объём бочки, л', 'Цена литра, ₽', 'Газ в бочке (замер владельца), л', 'Замер: время', 'Замер: литров с 8:00', 'Добавлена', 'Удалена'],
-  rep: ['Ключ', 'id заправки', 'Заправка', 'Дата', 'Смена', 'Литры (18/22 — с 8:00, утро — за сутки)', 'Остаток в бочке, л', 'Расчётный остаток, л', 'Расхождение, л', 'Касса, ₽', 'Отправлено'],
+  rep: ['Ключ', 'id заправки', 'Заправка', 'Дата', 'Смена', 'Литры (18/22 — с 8:00, утро — за сутки)', 'Остаток в бочке, л', 'Расчётный остаток, л', 'Расхождение, л', 'Касса, ₽', 'Отправлено', 'Безнал, ₽'],
   del: ['id', 'id заправки', 'Заправка', 'Литры', 'Время'],
   dev: ['id телефона', 'Ключ', 'id заправки', 'Заправка', 'Кто', 'Владелец', 'Подключён', 'Был в сети', 'Статус', 'Адрес уведомлений', 'Устройство'],
 };
 const FMT = {
   st:  ['@', '@', '0', '0.00', '0', 'dd.MM.yyyy HH:mm', '0.##', 'dd.MM.yyyy HH:mm', 'dd.MM.yyyy HH:mm'],
-  rep: ['@', '@', '@', '@', '@', '0.##', '0', '0', '+0;-0;0', '#,##0', 'dd.MM.yyyy HH:mm'],
+  rep: ['@', '@', '@', '@', '@', '0.##', '0', '0', '+0;-0;0', '#,##0', 'dd.MM.yyyy HH:mm', '#,##0'],
   del: ['@', '@', '@', '0', 'dd.MM.yyyy HH:mm'],
   dev: ['@', '@', '@', '@', '@', '@', 'dd.MM.yyyy HH:mm', 'dd.MM.yyyy HH:mm', '@', '@', '@'],
 };
@@ -238,7 +238,7 @@ function readStations_() {
 function readReports_() {
   return values_('rep').map((r, i) => ({
     row: i + 2, key: String(r[0]), sid: String(r[1]), date: dstr_(r[3]), slot: slot_(r[4]), value: Number(r[5]) || 0,
-    tank: num_(r[6]), cash: num_(r[9]), at: ms_(r[10]),
+    tank: num_(r[6]), cash: num_(r[9]), at: ms_(r[10]), card: num_(r[11]),
   })).filter(r => r.key && r.sid);
 }
 function readDeliveries_() {
@@ -271,6 +271,7 @@ function tzOffsetMs_(d) {
   const sign = z[0] === '-' ? -1 : 1;
   return sign * (Number(z.slice(1, 3)) * 60 + Number(z.slice(3, 5))) * 60000;
 }
+function dm_(key) { const p = key.split('-'); return Number(p[2]) + '.' + p[1]; }
 function today_() { return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd'); }
 function shiftDate_(key, days) {
   const p = key.split('-').map(Number);
@@ -288,7 +289,7 @@ function getState(onlySid) {
     })),
     reports: d.reports.filter(r => r.date >= cutoff && mine(r)).map(r => ({
       key: r.key, sid: r.sid, date: r.date, slot: r.slot, value: r.value, sold: r.sold, day: r.day, at: r.at,
-      tank: r.tank, cash: r.cash, expected: r.expected == null ? null : r.expected, diff: r.diff == null ? null : r.diff,
+      tank: r.tank, cash: r.cash, card: r.card, expected: r.expected == null ? null : r.expected, diff: r.diff == null ? null : r.diff,
     })),
     deliveries: d.deliveries.filter(x => x.at >= dlCut && mine(x)).map(x => ({ id: x.id, sid: x.sid, liters: x.liters, at: x.at })),
     devices: onlySid ? [] : readDevices_().map(x => ({ dev: x.dev, sid: x.sid, who: x.who, owner: x.owner, at: x.at, seen: x.seen,
@@ -306,11 +307,13 @@ function submitReport(p) {
     if (!isFinite(v) || v < 0 || v > 1000000) fail_('Введите проданные литры цифрами.');
     const st = readStations_().find(s => s.id === sid && !s.deleted);
     if (!st) fail_('Заправка не найдена. Выберите её заново.');
-    let tank = null, cash = null;
+    let tank = null, cash = null, card = null;
     if (slot === '08') {
       tank = Number(p.tank); cash = Number(p.cash);
       if (p.tank === '' || p.tank == null || !isFinite(tank) || tank < 0) fail_('Введите остаток газа в бочке.');
       if (p.cash === '' || p.cash == null || !isFinite(cash) || cash < 0) fail_('Введите сумму денег в кассе.');
+      card = Number(p.card);
+      if (p.card === '' || p.card == null || !isFinite(card) || card < 0) fail_('Введите сумму безнала за сутки.');
     }
     const key = date + '_' + slot;
     const mine = readReports_().filter(r => r.sid === sid);
@@ -319,14 +322,14 @@ function submitReport(p) {
     if (v < b.lo) fail_('Меньше, чем в сводке ' + nm(b.loSlot) + ' (' + fmt_(b.lo) + ' л). Литры считаются с 8:00 и не уменьшаются. Проверьте цифры.');
     if (b.hi != null && v > b.hi) fail_('Больше, чем в сводке ' + nm(b.hiSlot) + ' (' + fmt_(b.hi) + ' л). Проверьте цифры.');
     const existing = mine.find(r => r.key === key);
-    const row = writeRow_('rep', existing ? existing.row : null, [key, sid, st.name, date, slot, v, tank, '', '', cash, new Date()]);
+    const row = writeRow_('rep', existing ? existing.row : null, [key, sid, st.name, date, slot, v, tank, '', '', cash, new Date(), card]);
     let info = { name: st.name, slot, liters: v, late: !!props_().getProperty('m_' + date + '_' + slot) };
     if (slot === '08') {
       const d = load_();
       const r = d.reports.find(x => x.sid === sid && x.key === key);
       if (r && r.expected != null) {
         sheet_('rep').getRange(row, 8, 1, 2).setValues([[Math.round(r.expected), Math.round(r.tank - r.expected)]]);
-        info.diff = r.tank - r.expected; info.tank = r.tank; info.cash = cash;
+        info.diff = r.tank - r.expected; info.tank = r.tank; info.cash = cash; info.card = card;
       }
     }
     return info;
@@ -334,7 +337,7 @@ function submitReport(p) {
   if (res.late) {
     const s = SLOTS.find(x => x.id === res.slot);
     safe_(() => notifyOwner_('Сводка пришла с опозданием', res.name + ', ' + s.label.toLowerCase() + ': ' + fmt_(res.liters) + ' л' +
-      (res.slot === '08' ? ' за сутки, касса ' + fmt_(res.cash || 0) + ' ₽' : ' с 8:00')));
+      (res.slot === '08' ? ' за сутки, касса ' + fmt_(res.cash || 0) + ' ₽, безнал ' + fmt_(res.card || 0) + ' ₽' : ' с 8:00')));
   }
   safe_(() => lowGasCheck_(String(p.sid)));
   return true;
@@ -561,7 +564,7 @@ function summary_(date, s) {
   if (!sts.length) return;
   const p = date.split('-').map(Number);
   const dueMs = Date.UTC(p[0], p[1] - 1, p[2], s.h) - tzOffsetMs_(new Date());
-  let total = 0, cash = 0, missing = 0, bigDiff = false, rev = 0, anyPrice = false; const low = [];
+  let total = 0, cash = 0, card = 0, missing = 0, bigDiff = false, rev = 0, anyPrice = false; const low = [];
   const lines = sts.filter(st => !(st.createdAt > dueMs)).map(st => {
     const r = d.reports.find(x => x.sid === st.id && x.date === date && x.slot === s.id);
     const pct = st.capacity ? Math.round(st.tank / st.capacity * 100) : null;
@@ -570,15 +573,16 @@ function summary_(date, s) {
     total += r.value;
     if (st.price > 0) { rev += r.value * st.price; anyPrice = true; }
     if (s.id !== '08') return st.name + ': ' + fmt_(r.value) + ' л с 8:00 · в бочке ≈ ' + fmt_(Math.max(0, Math.round(st.tank))) + ' л' + (pct != null ? ' (' + pct + '%)' : '');
-    cash += r.cash || 0;
+    cash += r.cash || 0; card += r.card || 0;
     const diff = r.diff == null ? null : Math.round(r.diff);
     if (diff != null && Math.abs(diff) >= 50) bigDiff = true;
-    return st.name + ': ' + fmt_(r.value) + ' л за сутки · касса ' + fmt_(r.cash || 0) + ' ₽ · бочка ' + fmt_(r.tank) + ' л' +
+    return st.name + ': ' + fmt_(r.value) + ' л за сутки' + (st.price > 0 ? ' · выручка ' + fmt_(Math.round(r.value * st.price)) + ' (' + fmt_(r.card || 0) + ' безнал)' : ' · безнал ' + fmt_(r.card || 0) + ' ₽') +
+      ' · касса ' + fmt_(r.cash || 0) + ' ₽ · бочка ' + fmt_(r.tank) + ' л' +
       (diff != null ? ' (расчёт ' + fmt_(Math.round(r.expected)) + ', ' + (diff > 0 ? '+' : '') + fmt_(diff) + ')' : '');
   });
   if (!lines.length) return;
   const title = s.id === '08'
-    ? 'Итог за сутки: ' + fmt_(total) + ' л' + (anyPrice ? ' · выручка ' + fmt_(Math.round(rev)) + ' ₽' : '') + ' · касса ' + fmt_(cash) + ' ₽' + (missing ? ' · нет сводок: ' + missing : '')
+    ? 'Выручка за ' + dm_(shiftDate_(date, -1)) + ': ' + (anyPrice ? fmt_(Math.round(rev)) + ' ₽ (' + fmt_(card) + ' безнал)' : 'безнал ' + fmt_(card) + ' ₽') + ' · ' + fmt_(total) + ' л' + (missing ? ' · нет сводок: ' + missing : '')
     : 'Сводка ' + s.time + ': ' + fmt_(total) + ' л с 8:00' + (anyPrice ? ' · ' + fmt_(Math.round(rev)) + ' ₽' : '') + (missing ? ' · нет сводок: ' + missing : '');
   let body = lines.join('\n');
   if (low.length) body += '\nМало газа: ' + low.join(', ');
