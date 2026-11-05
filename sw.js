@@ -8,15 +8,19 @@ self.addEventListener("activate", e => e.waitUntil(self.clients.claim()));
 
 self.addEventListener("push", e => {
   e.waitUntil((async () => {
+    // Сразу показываем уведомление: Safari отключает уведомления сайту, если push пришёл, а показа не было.
+    await self.registration.showNotification("Сводки АГЗС", { body: "Загружаю…", tag: "agzs-wait", icon: "icon.png", silent: true });
     let msgs = [];
     try {
-      const r = await fetch(API, { method: "POST", body: JSON.stringify({ a: "inbox", dev: DEV }) });
+      const ctl = new AbortController(); setTimeout(() => ctl.abort(), 15000);
+      const r = await fetch(API, { method: "POST", body: JSON.stringify({ a: "inbox", dev: DEV }), signal: ctl.signal });
       const j = await r.json();
       if (j && j.ok && Array.isArray(j.data)) msgs = j.data;
     } catch (err) {}
+    const waiting = await self.registration.getNotifications({ tag: "agzs-wait" });
     if (!msgs.length) {
-      const open = await self.registration.getNotifications();
-      if (open.length) return;
+      const others = (await self.registration.getNotifications()).filter(n => n.tag !== "agzs-wait");
+      if (others.length) { waiting.forEach(n => n.close()); return; }
       msgs = [{ id: "x", title: "Сводки АГЗС", body: "Есть новости. Откройте приложение." }];
     }
     for (const m of msgs) {
@@ -29,6 +33,7 @@ self.addEventListener("push", e => {
         data: { url: self.registration.scope },
       });
     }
+    waiting.forEach(n => n.close());
   })());
 });
 

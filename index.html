@@ -289,37 +289,52 @@ let swReg = null;
 async function registerSW(){
   if (!("serviceWorker" in navigator) || S.demo) return;
   try {
-    swReg = await navigator.serviceWorker.register("sw.js?api=" + encodeURIComponent(S.api) + "&dev=" + encodeURIComponent(S.dev), { scope: "./" });
+    const reg = await navigator.serviceWorker.register("sw.js?api=" + encodeURIComponent(S.api) + "&dev=" + encodeURIComponent(S.dev), { scope: "./" });
+    // нужен активный помощник, чтобы подписка сработала сразу по нажатию
+    swReg = await Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(() => r(reg), 8000))]);
   } catch(e){ swReg = null; }
 }
+const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const STANDALONE = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
 function pushStatus(){
   if (S.demo) return "default";
+  if (IOS && !STANDALONE) return "ios-home";
   if (!pushSupported() || !swReg) return "unsupported";
   return Notification.permission === "granted" ? "on" : Notification.permission;
 }
 /** Подписывает телефон и сообщает серверу, кому он принадлежит. ask=true — спросить разрешение. */
-async function syncPush(ask){
-  if (S.demo){ S.push = "on"; return; }
-  if (!pushSupported() || !swReg || !S.vapid){ S.push = "unsupported"; return; }
-  if (Notification.permission !== "granted"){
-    if (!ask){ S.push = Notification.permission; return; }
-    const p = await Notification.requestPermission();
-    if (p !== "granted"){ S.push = p; return; }
-  }
-  const reg = await navigator.serviceWorker.ready;
-  let sub = await reg.pushManager.getSubscription();
-  if (sub && !sameKey(sub.options && sub.options.applicationServerKey, S.vapid)){ await sub.unsubscribe(); sub = null; }
-  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(S.vapid) });
-  await call("subscribe", { dev: S.dev, sub: sub.toJSON(), sid: S.sid || "", owner: S.owner, pin: S.owner ? S.pin : "" });
-  S.push = "on";
+function syncPush(ask){
+  if (S.demo){ S.push = "on"; return Promise.resolve(); }
+  if (IOS && !STANDALONE){ S.push = "ios-home"; return Promise.resolve(); }
+  if (!pushSupported() || !swReg || !S.vapid){ S.push = "unsupported"; return Promise.resolve(); }
+  if (!ask && Notification.permission !== "granted"){ S.push = Notification.permission; return Promise.resolve(); }
+  const opts = { userVisibleOnly: true, applicationServerKey: b64ToBytes(S.vapid) };
+  // Safari требует вызвать subscribe() сразу в обработчике нажатия, без ожиданий перед ним.
+  const first = ask ? swReg.pushManager.subscribe(opts) : null;
+  return (async () => {
+    let sub = null;
+    try { sub = first ? await first : await swReg.pushManager.getSubscription(); }
+    catch(e){
+      if (Notification.permission === "denied"){ S.push = "denied"; return; }
+      sub = await swReg.pushManager.getSubscription();       // подписка со старым ключом мешает новой
+      if (!sub) throw e;
+    }
+    if (Notification.permission !== "granted"){ S.push = Notification.permission; return; }
+    if (sub && !sameKey(sub.options && sub.options.applicationServerKey, S.vapid)){ await sub.unsubscribe(); sub = null; }
+    if (!sub) sub = await swReg.pushManager.subscribe(opts);
+    await call("subscribe", { dev: S.dev, sub: sub.toJSON(), sid: S.sid || "", owner: S.owner, pin: S.owner ? S.pin : "" });
+    S.push = "on";
+  })();
 }
 function quietSync(){ syncPush(false).then(render, () => {}); }
 function pushCard(forOwner){
   const st = S.push;
   if (st === "on") return `<div class="okline">✓ Уведомления на этом телефоне включены</div>`;
-  if (st === "unsupported") return `<div class="msg warn">Этот браузер не умеет показывать уведомления. Откройте приложение в Google Chrome.</div>`;
+  if (st === "ios-home") return `<div class="card notice"><h2>Уведомления на iPhone</h2>
+    <p class="hint" style="margin:0">На iPhone уведомления работают только из значка на экране. В Safari нажмите «Поделиться» → «На экран „Домой“», затем откройте приложение с этого значка и включите уведомления там.</p></div>`;
+  if (st === "unsupported") return `<div class="msg warn">Этот браузер не умеет показывать уведомления. На Android откройте приложение в Google Chrome, на компьютере — в Chrome или Safari.</div>`;
   if (st === "denied") return `<div class="card notice"><h2>Уведомления запрещены</h2>
-    <p class="hint" style="margin:0">Нажмите на значок замка рядом с адресом сайта → «Уведомления» → «Разрешить». Потом вернитесь сюда.</p>
+    <p class="hint" style="margin:0">${IOS ? "Настройки iPhone → Уведомления → Сводки → включите «Допуск уведомлений»." : "Нажмите на значок слева от адреса сайта → «Уведомления» → «Разрешить». В Safari на Mac: Safari → Настройки → Веб-сайты → Уведомления."} Потом вернитесь сюда.</p>
     <button type="button" class="btn btn-soft" data-act="reload">Я разрешил — проверить</button></div>`;
   return `<div class="card notice"><h2>Включите уведомления</h2>
     <p class="hint" style="margin:0">${forOwner ? "Сюда будут приходить сводки по всем заправкам и тревоги." : "Телефон напомнит в 8:00, 18:00 и 22:00, если сводка ещё не отправлена."}</p>
