@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>Сводки АГЗС</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0B4FA8">
+<meta name="theme-color" content="#CFE6FB">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -150,6 +150,14 @@ td.num{font-family:var(--f-num)} td.miss{color:var(--bad);font-family:var(--f-bo
 .stack{display:flex;flex-direction:column;gap:12px}
 .back{align-self:flex-start}
 
+/* Светло-голубая тема: всегда светлая, даже если на телефоне включён тёмный режим */
+:root, :root:not([data-theme="light"]), :root[data-theme="dark"]{
+  --bg:#D6EAFB; --surface:#FFFFFF; --sunk:#EAF4FE; --ink:#0E1B24; --muted:#3D5870; --line:#B4D0EC;
+  --accent:#1450C8; --accent-ink:#FFFFFF; --accent-soft:#D2E4FC;
+  --ok:#1C7A49; --ok-bg:#DCF1E4; --warn:#8F5500; --warn-bg:#FCEDCF; --bad:#B0261D; --bad-bg:#FADFDB;
+  color-scheme:light;
+}
+body{background:linear-gradient(180deg,#CFE6FB 0%,#E4F1FD 100%) fixed,var(--bg)}
 .slots{grid-template-columns:repeat(4,1fr);gap:6px}
 .slot{padding:10px 2px;min-height:90px}
 .slot b{font-size:19px} .slot span{font-size:16px} .slot em{font-size:13px}
