@@ -5,7 +5,7 @@
  */
 
 /* ======== НАСТРОЙКИ ======== */
-const APP_VERSION = '05.11.2026 14:30';
+const APP_VERSION = '05.11.2026 15:11';
 const OWNER_PIN_DEFAULT = '1234';    // используется, только если PIN ещё не сохранён загрузчиком
 const OPERATOR_PIN = '704747';       // код входа для операторов (можно поменять в приложении)
 const TZ = 'Europe/Samara';          // часовой пояс заправок
@@ -24,17 +24,19 @@ const SUMMARY_AFTER = 45;   // мин после срока: сводка вла
 const LOW_PCT = 20;         // % — «мало газа»
 const REPORT_DAYS = 70;
 
-const NAMES = { st: 'Заправки', rep: 'Сводки за смены', del: 'Привозы', dev: 'Устройства' };
+const NAMES = { st: 'Заправки', rep: 'Сводки за смены', del: 'Привозы', dev: 'Устройства', biz: 'Оборот' };
 const HEAD = {
   st:  ['id', 'Название', 'Объём бочки, л', 'Цена литра, ₽', 'Газ в бочке (замер владельца), л', 'Замер: время', 'Замер: литров с 8:00', 'Добавлена', 'Удалена'],
   rep: ['Ключ', 'id заправки', 'Заправка', 'Дата', 'Смена', 'Литры (18/22 — с 8:00, утро — за сутки)', 'Остаток в бочке, л', 'Расчётный остаток, л', 'Расхождение, л', 'Касса, ₽', 'Отправлено', 'Безнал, ₽'],
   del: ['id', 'id заправки', 'Заправка', 'Литры', 'Время'],
+  biz: ['Дата', 'Кассы, ₽', 'Газ в бочках, ₽', 'Счета, ₽', 'Дебиторка, ₽', 'Долг поставщику, ₽', 'Оборот, ₽', 'Сохранено'],
   dev: ['id телефона', 'Ключ', 'id заправки', 'Заправка', 'Кто', 'Владелец', 'Подключён', 'Был в сети', 'Статус', 'Адрес уведомлений', 'Устройство'],
 };
 const FMT = {
   st:  ['@', '@', '0', '0.00', '0', 'dd.MM.yyyy HH:mm', '0.##', 'dd.MM.yyyy HH:mm', 'dd.MM.yyyy HH:mm'],
   rep: ['@', '@', '@', '@', '@', '0.##', '0', '0', '+0;-0;0', '#,##0', 'dd.MM.yyyy HH:mm', '#,##0'],
   del: ['@', '@', '@', '0', 'dd.MM.yyyy HH:mm'],
+  biz: ['@', '#,##0', '#,##0', '#,##0', '#,##0', '#,##0', '#,##0', 'dd.MM.yyyy HH:mm'],
   dev: ['@', '@', '@', '@', '@', '@', 'dd.MM.yyyy HH:mm', 'dd.MM.yyyy HH:mm', '@', '@', '@'],
 };
 
@@ -65,6 +67,7 @@ const ROUTES = {
   setEmail: r => setEmail(r.pin, r.on),
   setOpPin: r => setOpPin(r.pin, r.code),
   setOwnerPin: r => setOwnerPin(r.pin, r.code),
+  saveBiz: r => { checkPin_(r.pin); saveBiz_(r.biz); return getState(null); },
   reloadServer: r => { checkPin_(r.pin); if (typeof bootReload_ !== 'function') fail_('Этот сервер ещё не умеет обновляться сам.'); return bootReload_(); },
   revokeDevice: r => setDeviceStatus(r.pin, r.target, false),
   restoreDevice: r => setDeviceStatus(r.pin, r.target, true),
@@ -295,6 +298,8 @@ function getState(onlySid) {
     devices: onlySid ? [] : readDevices_().map(x => ({ dev: x.dev, sid: x.sid, who: x.who, owner: x.owner, at: x.at, seen: x.seen,
       active: x.status !== 'отключён', push: !!x.sub, ua: x.ua })),
     mySid: onlySid || null,
+    biz: onlySid ? null : readBiz_(),
+    bizHistory: onlySid ? [] : bizHistory_(),
     vapid: vapid_().pub,
     serverTime: Date.now(),
   };
@@ -364,6 +369,56 @@ function addDelivery(p) {
   });
   safe_(() => notifyOwner_('Привоз газа: ' + info.name, '+' + fmt_(info.v) + ' л'));
   return true;
+}
+
+/* ---------- оборот бизнеса (только владелец) ---------- */
+function bizDefault_() {
+  return {
+    accounts: [{ id: 'a1', name: 'Расчётный счёт', amount: 0 }],
+    debtors: [{ id: 'd1', name: 'Сергей (газели)', amount: 0 }, { id: 'd2', name: 'Татьяна (газели)', amount: 0 }],
+    creditors: [{ id: 'c1', name: 'Поставщик газа', amount: 0 }],
+    at: 0,
+  };
+}
+function readBiz_() {
+  try { const b = JSON.parse(props_().getProperty('BIZ') || 'null'); if (b && b.accounts) return b; } catch (e) {}
+  return bizDefault_();
+}
+function cleanRows_(rows) {
+  if (!Array.isArray(rows)) return [];
+  return rows.slice(0, 30).map((x, i) => ({
+    id: String(x && x.id || ('r' + i)).replace(/[^\w-]/g, '').slice(0, 20) || ('r' + i),
+    name: String(x && x.name || '').trim().slice(0, 60),
+    amount: Math.round((Number(x && x.amount) || 0) * 100) / 100,
+  })).filter(x => x.name || x.amount);
+}
+/** Кассы — по последней утренней сводке каждой заправки; газ — остаток в бочке × цена литра. */
+function bizAuto_() {
+  const d = load_(); let cash = 0, gas = 0;
+  d.stations.filter(s => !s.deleted).forEach(st => {
+    const m = d.reports.filter(r => r.sid === st.id && r.slot === '08' && r.cash != null).sort((a, b) => a.date < b.date ? 1 : -1)[0];
+    if (m) cash += m.cash;
+    if (st.price > 0) gas += Math.max(0, st.tank) * st.price;
+  });
+  return { cash, gas };
+}
+function saveBiz_(b) {
+  const biz = { accounts: cleanRows_(b && b.accounts), debtors: cleanRows_(b && b.debtors), creditors: cleanRows_(b && b.creditors), at: Date.now() };
+  props_().setProperty('BIZ', JSON.stringify(biz));
+  const sum = rows => rows.reduce((a, x) => a + x.amount, 0);
+  const auto = bizAuto_();
+  const acc = sum(biz.accounts), deb = sum(biz.debtors), cre = sum(biz.creditors);
+  const total = auto.cash + auto.gas + acc + deb - cre;
+  withLock_(() => {
+    const day = today_();
+    const row = values_('biz').findIndex(r => dstr_(r[0]) === day);
+    writeRow_('biz', row >= 0 ? row + 2 : null, [day, Math.round(auto.cash), Math.round(auto.gas), Math.round(acc), Math.round(deb), Math.round(cre), Math.round(total), new Date()]);
+  });
+  return biz;
+}
+function bizHistory_() {
+  return values_('biz').map(r => ({ date: dstr_(r[0]), total: Number(r[6]) || 0, cash: Number(r[1]) || 0, gas: Number(r[2]) || 0, acc: Number(r[3]) || 0, deb: Number(r[4]) || 0, cre: Number(r[5]) || 0 }))
+    .filter(x => x.date).sort((a, b) => a.date < b.date ? -1 : 1).slice(-30);
 }
 
 /* ---------- владелец ---------- */

@@ -226,17 +226,17 @@ td.num{font-variant-numeric:tabular-nums} td.miss{color:var(--bad)} td.tot{font-
 /* нижнее меню владельца: плавающая стеклянная капсула */
 .nav{position:fixed;z-index:20;left:max(12px,env(safe-area-inset-left,0px));right:max(12px,env(safe-area-inset-right,0px));
   bottom:calc(10px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;pointer-events:none}
-.nav-in{pointer-events:auto;position:relative;width:100%;max-width:520px;display:grid;grid-template-columns:repeat(4,1fr);padding:6px;border-radius:30px;
+.nav-in{pointer-events:auto;position:relative;width:100%;max-width:520px;display:grid;grid-template-columns:repeat(5,1fr);padding:6px;border-radius:30px;
   background:linear-gradient(180deg,rgba(40,44,52,.62),rgba(22,25,30,.62));
   backdrop-filter:blur(22px) saturate(170%);-webkit-backdrop-filter:blur(22px) saturate(170%);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.14),inset 0 -1px 0 rgba(255,255,255,.04),0 12px 32px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.06)}
-.nav button{position:relative;z-index:1;border:0;background:none;color:#A9B2BD;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12.5px;font-weight:500;
+.nav button{position:relative;z-index:1;border:0;background:none;color:#A9B2BD;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11.5px;min-width:0;font-weight:500;
   min-height:56px;cursor:pointer;border-radius:24px;transition:color .3s ease}
 .nav button svg.i{font-size:26px;transition:transform .35s cubic-bezier(.3,1.4,.5,1)}
 .nav button[aria-current="page"]{color:#FF6A55}
 .nav button[aria-current="page"] svg.i{transform:translateY(-1px) scale(1.06)}
 /* стеклянная «капля» под выбранным разделом */
-.nav-pill{position:absolute;z-index:0;top:6px;bottom:6px;left:6px;width:calc((100% - 12px) / 4);border-radius:24px;
+.nav-pill{position:absolute;z-index:0;top:6px;bottom:6px;left:6px;width:calc((100% - 12px) / 5);border-radius:24px;
   background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.05));
   box-shadow:inset 0 1px 0 rgba(255,255,255,.28),inset 0 0 0 1px rgba(255,255,255,.08),0 4px 14px rgba(0,0,0,.25);
   transition:transform .5s cubic-bezier(.3,1.25,.4,1),width .3s ease;will-change:transform}
@@ -274,6 +274,33 @@ td.num{font-variant-numeric:tabular-nums} td.miss{color:var(--bad)} td.tot{font-
   .glass-fx{display:none}
 }
 
+/* оборот бизнеса */
+.biz-total .k{font-size:16px;color:#C9D0D8}
+.biz-total .v{font-size:40px;font-weight:700;line-height:1.05;letter-spacing:-.01em}
+.biz-bar{display:flex;height:12px;border-radius:7px;overflow:hidden;background:var(--surface-2);gap:2px}
+.biz-bar i{display:block;height:100%;transition:width .35s ease}
+.biz-leg{display:grid;grid-template-columns:12px 1fr auto;align-items:center;gap:10px;font-size:17px}
+.biz-leg i{width:12px;height:12px;border-radius:4px}
+.biz-leg span{color:#C9D0D8}
+.biz-leg b{font-size:18px}
+.neg{color:var(--bad)}
+.biz-note{font-size:14px;color:var(--muted)}
+.biz-note .dirty{color:var(--warn);font-weight:600}
+.biz-h{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:19px;font-weight:700}
+.biz-h b{font-size:20px;white-space:nowrap}
+.biz-h .spark{width:110px;height:40px}
+.biz-auto > div{font-size:16px}
+.biz-auto span{color:var(--ink)}
+.biz-auto small{color:var(--muted);font-size:14px;display:block;text-align:left;font-weight:400}
+.biz-auto b{font-size:17px}
+.biz-rows{display:flex;flex-direction:column;gap:8px}
+.biz-row{display:grid;grid-template-columns:1fr 150px 44px;gap:6px;align-items:center;padding:8px;border-radius:14px;background:var(--surface-2)}
+.biz-row .biz-name{grid-column:1/-1}
+.biz-row .txt{min-height:48px;font-size:17px;padding:10px 12px;background:var(--sunk)}
+.biz-row .biz-amt{grid-column:1/3;font-size:20px;font-weight:600}
+.biz-row .biz-amt{text-align:right}
+.biz-del{min-height:48px;font-size:22px;padding:0;color:var(--muted)}
+
 </style>
 </head>
 <body>
@@ -287,7 +314,7 @@ const SLOTS = [
   { id: "18", label: "Вечер", time: "18:00", due: 18 },
   { id: "22", label: "Ночь",  time: "22:00", due: 22 },
 ];
-const APP_BUILD = "05.11.2026 15:01";
+const APP_BUILD = "05.11.2026 15:11";
 /** Если на сайте лежит новая версия, а браузер показал сохранённую старую — перезагрузиться на свежую. */
 async function checkUpdate(){
   try {
@@ -298,7 +325,7 @@ async function checkUpdate(){
     let tried = null; try { tried = sessionStorage.getItem("agzs.upd"); } catch(e){}
     if (tried === v) return;                       // уже пробовали — не зацикливаемся
     try { sessionStorage.setItem("agzs.upd", v); } catch(e){}
-    if (S.busy || Object.values(S.form || {}).some(x => x)) return;   // не мешаем, если человек что-то вводит
+    if (S.busy || Object.values(S.form || {}).some(x => x) || bizDirty()) return;   // не мешаем, если человек что-то вводит
     location.replace(location.pathname + "?v=" + encodeURIComponent(v));
   } catch(e){}
 }
@@ -435,7 +462,7 @@ const ARGS = {
   ownerLogin: pin => ({ pin, ua: navigator.userAgent }), getSettings: pin => ({ pin }), setEmail: (pin, on) => ({ pin, on }),
   addStation: (pin, p) => ({ pin, p }), updateStation: (pin, p) => ({ pin, p }), fixTank: (pin, p) => ({ pin, p }),
   deleteStation: (pin, id) => ({ pin, id }), deleteDelivery: (pin, id) => ({ pin, id }),
-  subscribe: o => o, testPush: (pin, dev) => ({ pin, dev }),
+  subscribe: o => o, testPush: (pin, dev) => ({ pin, dev }), saveBiz: (pin, biz) => ({ pin, biz }),
   opStations: code => ({ code }), opRegister: o => o,
   setOpPin: (pin, code) => ({ pin, code }), setOwnerPin: (pin, code) => ({ pin, code }), reloadServer: pin => ({ pin }), revokeDevice: (pin, target) => ({ pin, target }), restoreDevice: (pin, target) => ({ pin, target }),
 };
@@ -471,6 +498,7 @@ function applyState(st){
   S.reports = st.reports || []; S.deliveries = st.deliveries || [];
   if (st.vapid) S.vapid = st.vapid;
   S.devices = st.devices || [];
+  if (st.biz !== undefined){ S.biz = st.biz; S.bizHistory = st.bizHistory || []; if (!S.bizDraft && S.biz) S.bizDraft = JSON.parse(JSON.stringify(S.biz)); }
   if (st.mySid && !S.owner){ S.sid = st.mySid; lsSet("agzs.sid", S.sid); }
   S.ready = true; S.loadErr = null; S.lastSync = Date.now();
 }
@@ -588,6 +616,7 @@ const IC = {
   truck: '<svg class="i" viewBox="0 0 24 24"><path d="M2 6h11v10H2zM13 10h4l3 3v3h-7"/><circle cx="6" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg>',
   send: '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>',
   chev: '<svg class="i" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>',
+  wallet: '<svg class="i" viewBox="0 0 24 24"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><path d="M4 7.5V18a2 2 0 0 0 2 2h14V9H6.5A2.5 2.5 0 0 1 4 6.5"/><circle cx="16" cy="14.5" r="1.3"/></svg>',
 };
 /** Цвет уровня: тёмно-красный у дна → жёлтый к 30 % → ярко-зелёный к 100 %. */
 function levelColor(pct){
@@ -633,7 +662,7 @@ function heroTitle(sub, title, short){
   return `<div class="hero-title${short ? " short" : ""}"><span class="d">${esc(sub)}</span><h1>${esc(title)}</h1></div>`;
 }
 let lastView = null;
-const NAV = [["home", "Сводка"], ["stations", "Заправки"], ["analytics", "Аналитика"], ["settings", "Настройки"]];
+const NAV = [["home", "Сводка"], ["stations", "Заправки"], ["analytics", "Аналитика"], ["biz", "Оборот"], ["settings", "Настройки"]];
 /** Меню рисуется один раз и дальше только переключается — так «капля» плавно перетекает между разделами. */
 function updateNav(show){
   const host = document.getElementById("navHost");
@@ -655,7 +684,7 @@ function updateNav(show){
 function navBar(){
   const v = S.view === "detail" || S.view === "add" ? "stations" : S.view;
   const b = (id, ic, label) => `<button type="button" data-act="nav" data-v="${id}" ${v === id ? 'aria-current="page"' : ""}>${ic}<span>${label}</span></button>`;
-  return `<nav class="nav" aria-label="Разделы"><div class="nav-in"><span class="nav-pill" aria-hidden="true"></span>${b("home", IC.home, "Сводка")}${b("stations", IC.pump, "Заправки")}${b("analytics", IC.chart, "Аналитика")}${b("settings", IC.gear, "Настройки")}</div></nav>`;
+  return `<nav class="nav" aria-label="Разделы"><div class="nav-in"><span class="nav-pill" aria-hidden="true"></span>${b("home", IC.home, "Сводка")}${b("stations", IC.pump, "Заправки")}${b("analytics", IC.chart, "Аналитика")}${b("biz", IC.wallet, "Оборот")}${b("settings", IC.gear, "Настройки")}</div></nav>`;
 }
 function footer(){
   if (S.owner) return "";
@@ -892,6 +921,7 @@ function ownerView(){
   if (S.view === "settings") return settingsView();
   if (S.view === "stations") return stationsView();
   if (S.view === "analytics") return analyticsView();
+  if (S.view === "biz") return bizView();
   const date = workDate();
   const warn = (S.settings && S.settings.defaultPin ? `<div class="msg warn">Вы используете PIN 1234. Смените его в «Настройках».</div>` : "")
     + (S.push !== "on" ? pushCard(true) : "");
@@ -940,6 +970,80 @@ function ownerView(){
     <div class="card"><div class="card-h">Остатки газа в резервуарах</div><div class="tanks">${tankRows.join("")}</div></div>
     <div class="card"><div class="card-h">${IC.doc}Сводки сегодня</div><div class="st-rows">${statusRows.join("")}</div></div>
     ${syncLine()}`;
+}
+/* ---------- оборот бизнеса ---------- */
+const BIZ_GROUPS = [
+  ["accounts", "Деньги на счетах", 1, "Пока вносите вручную."],
+  ["debtors", "Дебиторская задолженность", 1, "Кто вам должен."],
+  ["creditors", "Долг поставщику", -1, "Вычитается из оборота."],
+];
+const bizSum = rows => (rows || []).reduce((a, x) => a + (Number(x.amount) || 0), 0);
+function bizAuto(){
+  let cash = 0, gas = 0; const rows = [];
+  for (const st of S.stations){
+    const m = stReports(st.id).filter(r => r.slot === "08" && r.cash != null).sort((a, b) => a.date < b.date ? 1 : -1)[0];
+    const p = priceOf(st), g = p ? Math.max(0, st.tank) * p : null;
+    if (m) cash += m.cash; if (g) gas += g;
+    rows.push({ st, m, p, g });
+  }
+  return { cash, gas, rows };
+}
+function bizTotals(){
+  const d = S.bizDraft || {}, a = bizAuto();
+  const accounts = bizSum(d.accounts), debtors = bizSum(d.debtors), creditors = bizSum(d.creditors);
+  return { ...a, accounts, debtors, creditors, assets: a.cash + a.gas + accounts + debtors, total: a.cash + a.gas + accounts + debtors - creditors };
+}
+const bizDirty = () => S.biz && S.bizDraft && JSON.stringify(rowsOnly(S.biz)) !== JSON.stringify(rowsOnly(S.bizDraft));
+const rowsOnly = b => BIZ_GROUPS.map(([g]) => (b[g] || []).map(r => [r.name, Number(r.amount) || 0]));
+const BIZ_COLORS = { cash: "#3DD46F", gas: "#F5C542", accounts: "#5AA8FF", debtors: "#B784FF" };
+function bizView(){
+  if (!S.bizDraft) S.bizDraft = JSON.parse(JSON.stringify(S.biz || { accounts: [], debtors: [], creditors: [] }));
+  const t = bizTotals();
+  const part = (k, label) => `<div class="biz-leg"><i style="background:${BIZ_COLORS[k]}"></i><span>${label}</span><b class="num" id="bz-l-${k}">${fmt(Math.round(t[k]))} ₽</b></div>`;
+  const bar = ["cash", "gas", "accounts", "debtors"].map(k => `<i id="bz-b-${k}" style="background:${BIZ_COLORS[k]};width:${t.assets > 0 ? (Math.max(0, t[k]) / t.assets * 100).toFixed(2) : 0}%"></i>`).join("");
+  const autoCash = t.rows.map(x => `<div><span>${esc(x.st.name)}${x.m ? ` <small>утро ${esc(dm(x.m.date))}</small>` : ""}</span><b class="num">${x.m ? fmt(x.m.cash) + " ₽" : "—"}</b></div>`).join("");
+  const autoGas = t.rows.map(x => `<div><span>${esc(x.st.name)} <small class="num">${fmt(Math.max(0, x.st.tank))} л${x.p ? " × " + fmt(x.p, 2) + " ₽" : ""}</small></span><b class="num">${x.g != null ? fmt(Math.round(x.g)) + " ₽" : '<span class="cmp">нет цены</span>'}</b></div>`).join("");
+  const edit = ([g, title, sign, hint]) => `<div class="card"><div class="biz-h"><span>${title}</span><b class="num${sign < 0 ? " neg" : ""}" id="bz-${g}">${sign < 0 ? "− " : ""}${fmt(Math.round(t[g]))} ₽</b></div>
+    <div class="hint" style="font-size:15px;margin-top:-6px">${hint}</div>
+    <div class="biz-rows">${(S.bizDraft[g] || []).map(r => `<div class="biz-row">
+      <input class="txt biz-name" id="bn-${g}-${esc(r.id)}" data-biz="${g}:${esc(r.id)}:name" value="${esc(r.name)}" placeholder="Название" autocomplete="off">
+      <input class="txt biz-amt num" id="ba-${g}-${esc(r.id)}" data-biz="${g}:${esc(r.id)}:amount" inputmode="decimal" value="${r.amount ? esc(fmt(r.amount, 2)) : ""}" placeholder="0" autocomplete="off">
+      <button type="button" class="mini biz-del" data-act="bizDel" data-g="${g}" data-id="${esc(r.id)}" aria-label="Удалить строку">×</button></div>`).join("")}</div>
+    <button type="button" class="link back" data-act="bizAdd" data-g="${g}">+ Добавить строку</button></div>`;
+  const hist = (S.bizHistory || []).slice(-8);
+  const histHtml = hist.length ? `<div class="card"><div class="biz-h"><span>История оборота</span>${hist.length > 1 ? sparkline(hist.map(h => h.total)) : ""}</div>
+    <div class="kv">${hist.slice().reverse().map((h, i, arr) => { const prev = arr[i + 1]; const d = prev ? h.total - prev.total : null;
+      return `<div><span>${esc(dayShort(h.date))}</span><b class="num">${fmt(h.total)} ₽${d != null ? `<small><span class="${d >= 0 ? "up" : "down"}">${d >= 0 ? "+" : "−"}${fmt(Math.abs(d))} ₽</span></small>` : ""}</b></div>`; }).join("")}</div></div>` : "";
+  const saved = S.biz && S.biz.at ? `Сохранено ${esc(dayShort(dkey(new Date(S.biz.at))))} в ${timeStr(new Date(S.biz.at))}` : "Ещё не сохранялось";
+  return `${heroTitle(dayLong(new Date()), "Оборот бизнеса", true)}
+    <div class="card biz-total">
+      <div class="k">Оборот</div>
+      <div class="v num" id="bz-total">${fmt(Math.round(t.total))} ₽</div>
+      <div class="biz-bar">${bar}</div>
+      ${part("cash", "Деньги в кассах")}${part("gas", "Газ в бочках")}${part("accounts", "Деньги на счетах")}${part("debtors", "Дебиторка")}
+      <div class="biz-leg"><i style="background:var(--bad)"></i><span>Долг поставщику</span><b class="num neg" id="bz-l-creditors">− ${fmt(Math.round(t.creditors))} ₽</b></div>
+      <div class="biz-note" id="bz-dirty">${bizDirty() ? '<span class="dirty">Есть несохранённые изменения</span>' : esc(saved)}</div>
+    </div>
+    <div class="card"><div class="biz-h"><span>Деньги в кассах</span><b class="num">${fmt(Math.round(t.cash))} ₽</b></div>
+      <div class="hint" style="font-size:15px;margin-top:-6px">Из последних утренних сводок операторов.</div><div class="kv biz-auto">${autoCash}</div></div>
+    <div class="card"><div class="biz-h"><span>Газ в бочках</span><b class="num">${fmt(Math.round(t.gas))} ₽</b></div>
+      <div class="hint" style="font-size:15px;margin-top:-6px">Остаток в бочке × цена продажи литра.</div><div class="kv biz-auto">${autoGas}</div></div>
+    ${BIZ_GROUPS.map(edit).join("")}
+    ${S.err ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}
+    ${S.note ? `<div class="msg ok">${esc(S.note)}</div>` : ""}
+    <button type="button" class="btn btn-main" data-act="bizSave" ${S.busy ? "disabled" : ""}>${S.busy ? "Сохраняю…" : "Сохранить"}</button>
+    ${histHtml}`;
+}
+function updateBizTotals(){
+  const t = bizTotals(), set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set("bz-total", fmt(Math.round(t.total)) + " ₽");
+  for (const k of ["cash", "gas", "accounts", "debtors"]){
+    set("bz-l-" + k, fmt(Math.round(t[k])) + " ₽");
+    const b = document.getElementById("bz-b-" + k); if (b) b.style.width = (t.assets > 0 ? Math.max(0, t[k]) / t.assets * 100 : 0).toFixed(2) + "%";
+  }
+  set("bz-l-creditors", "− " + fmt(Math.round(t.creditors)) + " ₽");
+  for (const [g, , sign] of BIZ_GROUPS) set("bz-" + g, (sign < 0 ? "− " : "") + fmt(Math.round(t[g])) + " ₽");
+  const d = document.getElementById("bz-dirty"); if (d) d.innerHTML = bizDirty() ? '<span class="dirty">Есть несохранённые изменения</span>' : "Сохранено";
 }
 function stationsView(){
   const date = workDate();
@@ -1177,6 +1281,13 @@ const A = {
   nav(d){ S.view = d.v; S.mode = "owner"; S.err = null; S.note = null; S.confirm = null; S.form = {}; top0();
     if (d.v === "settings") return run(async () => { S.settings = await call("getSettings", S.pin); }); },
   anPer(d){ S.anPer = d.p; },
+  bizAdd(d){ S.bizDraft[d.g] = S.bizDraft[d.g] || []; const id = "r" + Date.now().toString(36); S.bizDraft[d.g].push({ id, name: "", amount: 0 }); S.note = null;
+    setTimeout(() => { const el = document.getElementById(`bn-${d.g}-${id}`); if (el) el.focus(); }, 30); },
+  bizDel(d){ S.bizDraft[d.g] = (S.bizDraft[d.g] || []).filter(r => r.id !== d.id); S.note = null; },
+  bizSave(){ return run(async () => {
+    const st = await call("saveBiz", S.pin, S.bizDraft);
+    S.bizDraft = null; applyState(st); S.note = "Сохранено. Оборот записан в таблицу на сегодня.";
+  }); },
   anSid(d){ S.anSid = d.sid || null; },
   home(){ S.view = "home"; S.err = null; S.note = null; S.confirm = null; S.form = {}; top0(); },
   reload(){ S.loadErr = null; S.push = pushStatus(); if (S.push === "on") quietSync(); refresh(); return Promise.resolve(); },
@@ -1360,6 +1471,12 @@ document.addEventListener("submit", e => {
   e.preventDefault(); const fn = SUBMIT[f.dataset.submit]; if (fn) fn();
 });
 document.addEventListener("input", e => {
+  const bz = e.target.dataset && e.target.dataset.biz;
+  if (bz && S.bizDraft){
+    const [g, id, field] = bz.split(":"); const row = (S.bizDraft[g] || []).find(r => r.id === id);
+    if (row){ if (field === "amount"){ const v = parseNum(e.target.value); row.amount = Number.isFinite(v) ? v : 0; } else row.name = e.target.value; }
+    S.note = null; updateBizTotals(); return;
+  }
   const k = e.target.dataset && e.target.dataset.f; if (!k) return;
   S.form[k] = e.target.value;
   if (k === "liters"){ if (S.confirm === "big"){ S.confirm = null; render(); } else updateCalc(); }
@@ -1372,6 +1489,7 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 // ---------- пример без сервера (для проверки дизайна) ----------
 const Demo = {
   st: [], rep: [], del: [], opPin: "704747",
+  biz: { accounts: [{ id: "a1", name: "Расчётный счёт", amount: 640000 }], debtors: [{ id: "d1", name: "Сергей (газели)", amount: 85000 }, { id: "d2", name: "Татьяна (газели)", amount: 62500 }], creditors: [{ id: "c1", name: "Поставщик газа", amount: 410000 }], at: Date.now() - 3600000 },
   dev: [
     { dev: "p1", sid: "d1", who: "Мария", owner: false, at: Date.now() - 3*86400000, seen: Date.now() - 40*60000, active: true, push: true, ua: "Android" },
     { dev: "p2", sid: "d1", who: "Сергей", owner: false, at: Date.now() - 9*86400000, seen: Date.now() - 2*86400000, active: true, push: false, ua: "Android" },
@@ -1404,7 +1522,8 @@ const Demo = {
   state(){
     const st = this.st.map(s => ({ ...s })), rep = this.rep.map(r => ({ ...r }));
     for (const s of st) computeStation(s, rep.filter(r => r.sid === s.id), this.del.filter(d => d.sid === s.id), ms => dkey(new Date(ms - 8*3600000)));
-    return { stations: st, reports: rep, deliveries: this.del.slice(), devices: this.dev.map(d => ({ ...d })) };
+    const hist = []; for (let i = 6; i >= 0; i--) hist.push({ date: shiftDate(curWorkDay(), -i), total: 1180000 + Math.round(Math.sin(i) * 60000) - i * 9000 });
+    return { stations: st, reports: rep, deliveries: this.del.slice(), devices: this.dev.map(d => ({ ...d })), biz: this.biz, bizHistory: hist };
   },
   async call(fn, a){
     await new Promise(r => setTimeout(r, 250));
@@ -1427,6 +1546,7 @@ const Demo = {
       case "deleteStation": this.st = this.st.filter(x => x.id !== a[1]); return this.state();
       case "deleteDelivery": this.del = this.del.filter(x => x.id !== a[1]); return this.state();
       case "subscribe": return { ok: true };
+      case "saveBiz": this.biz = { ...JSON.parse(JSON.stringify(a[1])), at: Date.now() }; return this.state();
       case "testPush": return "В примере уведомления не отправляются.";
       default: throw new Error("В примере это недоступно.");
     }
