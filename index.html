@@ -4,181 +4,232 @@
 <meta charset="utf-8">
 <title>Сводки АГЗС</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#CFE6FB">
+<meta name="theme-color" content="#0A0C0F">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;700&family=JetBrains+Mono:wght@500;700&family=Unbounded:wght@600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap">
 <style>
-html{-webkit-text-size-adjust:100%}
-/* Layout: one phone-width column, big tap targets, summary first; meter digits set like a pump counter. */
+/* Сводки АГЗС — тёмная тема с красным акцентом (по референсу владельца).
+   Сетка: одна колонка шириной с телефон; сверху фото заправки под шапкой; снизу меню владельца. */
 :root{
-  --bg:#EDF1F4; --surface:#FFFFFF; --sunk:#E2E8ED; --ink:#0E1B24; --muted:#4A5C69; --line:#C6D1D9;
-  --accent:#1450C8; --accent-ink:#FFFFFF; --accent-soft:#DCE6FA;
-  --ok:#1C7A49; --ok-bg:#DCF1E4; --warn:#8F5500; --warn-bg:#FCEDCF; --bad:#B0261D; --bad-bg:#FADFDB;
-  --f-display:"Unbounded","Golos Text",system-ui,sans-serif;
+  --bg:#0A0C0F; --surface:#15181D; --surface-2:#1C2026; --sunk:#0F1216; --line:#272C34;
+  --ink:#F3F5F8; --muted:#98A2AE; --accent:#E8372C; --accent-2:#FF5A3C; --accent-ink:#FFFFFF; --accent-soft:rgba(232,55,44,.16);
+  --ok:#3DD46F; --ok-bg:rgba(61,212,111,.14); --warn:#F5C542; --warn-bg:rgba(245,197,66,.14); --bad:#FF5B4F; --bad-bg:rgba(255,91,79,.15);
   --f-body:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  --f-num:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
-  --r:14px;
+  --f-display:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-num:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --r:18px; --gut:max(16px,env(safe-area-inset-left,0px));
+  color-scheme:dark;
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#0C151B; --surface:#152029; --sunk:#0F1920; --ink:#E7EDF1; --muted:#9CADBA; --line:#2B3A45;
-  --accent:#7AA2FF; --accent-ink:#061024; --accent-soft:#1B2B4D;
-  --ok:#62CF93; --ok-bg:#12321F; --warn:#F1B451; --warn-bg:#372810; --bad:#FF8B80; --bad-bg:#3C1613;
-  color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#0C151B; --surface:#152029; --sunk:#0F1920; --ink:#E7EDF1; --muted:#9CADBA; --line:#2B3A45;
-  --accent:#7AA2FF; --accent-ink:#061024; --accent-soft:#1B2B4D;
-  --ok:#62CF93; --ok-bg:#12321F; --warn:#F1B451; --warn-bg:#372810; --bad:#FF8B80; --bad-bg:#3C1613;
-  color-scheme:dark}
-
-body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:20px;line-height:1.4;
-  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 40px}
-#app{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+html{-webkit-text-size-adjust:100%;background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:19px;line-height:1.4;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-top:max(12px,env(safe-area-inset-top,0px));padding-bottom:calc(40px + env(safe-area-inset-bottom,0px))}
+body.has-nav{padding-bottom:calc(104px + env(safe-area-inset-bottom,0px))}
+#app{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:16px;position:relative}
 h1,h2,h3{margin:0;text-wrap:balance}
 button,input{font:inherit;color:inherit}
-:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
-.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+:focus-visible{outline:3px solid var(--accent-2);outline-offset:3px}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+svg.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 
-.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.brand{font-family:var(--f-display);font-size:17px;letter-spacing:.02em;display:flex;align-items:center;gap:10px}
-.brand i{width:26px;height:26px;border-radius:50%;background:var(--accent);display:inline-block;position:relative}
-.brand i::after{content:"";position:absolute;inset:6px 9px 5px;border-radius:50% 50% 45% 45%;background:var(--accent-ink)}
-.seg{display:flex;background:var(--sunk);border-radius:12px;padding:4px;gap:4px}
-.seg button{border:0;background:transparent;padding:8px 14px;border-radius:9px;font-size:16px;font-weight:500;color:var(--muted);cursor:pointer;min-height:40px}
-.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgb(0 0 0 / .12)}
+/* ---------- фото сверху ---------- */
+.hero-bg{position:absolute;z-index:0;top:calc(-1 * max(12px,env(safe-area-inset-top,0px)));left:calc(-1 * var(--gut));right:calc(-1 * var(--gut));height:360px;
+  background:url(hero.jpg) center 40%/cover no-repeat;pointer-events:none}
+.hero-bg::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,12,15,.78) 0%,rgba(10,12,15,.25) 30%,rgba(10,12,15,.35) 62%,var(--bg) 100%)}
+.hero-bg.short{height:250px}
+#app > *{position:relative;z-index:1}
+#app > .hero-bg{position:absolute;z-index:0}
+.hero-title{margin-top:96px;display:flex;flex-direction:column;gap:2px;text-shadow:0 2px 12px rgba(0,0,0,.6)}
+.hero-title .d{font-size:18px;color:#D9DEE5}
+.hero-title h1{font-size:34px;font-weight:700;letter-spacing:-.01em;line-height:1.1}
+.hero-title.short{margin-top:40px}
 
-.today{display:flex;flex-direction:column;gap:2px}
-.today .d{font-size:18px;color:var(--muted)}
-.today .t{font-family:var(--f-display);font-size:26px}
+/* ---------- шапка ---------- */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand .flame{width:38px;height:38px;flex:none}
+.brand b{display:block;font-size:22px;font-weight:700;line-height:1.1}
+.brand span{display:block;font-size:14px;color:#C9D0D8}
+.head-btns{display:flex;gap:6px}
+.icon-btn{width:46px;height:46px;border-radius:14px;border:0;background:rgba(255,255,255,.08);display:grid;place-items:center;cursor:pointer;position:relative;color:var(--ink);font-size:24px}
+.icon-btn .dot{position:absolute;top:9px;right:10px;width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--bg)}
+.seg{display:inline-flex;align-self:flex-start;background:rgba(255,255,255,.1);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:14px;padding:4px;gap:4px}
+.seg button{border:0;background:transparent;padding:9px 20px;border-radius:11px;font-size:17px;font-weight:500;color:#D2D8DF;cursor:pointer;min-height:42px}
+.seg button[aria-pressed="true"]{background:#F3F5F8;color:#0A0C0F;font-weight:700}
+.banner{border-radius:14px;padding:12px 16px;background:var(--warn-bg);color:var(--warn);font-size:16px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 
+/* ---------- карточки ---------- */
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px;display:flex;flex-direction:column;gap:14px}
-.label{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:500}
-.hint{font-size:17px;color:var(--muted)}
+.card-h{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:700}
+.card-h svg.i{font-size:26px;color:var(--muted)}
+.label{font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:500}
+.hint{font-size:16px;color:var(--muted)}
 .big{font-size:40px;font-weight:700;line-height:1.1}
 .row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.stack{display:flex;flex-direction:column;gap:12px}
+.loading{padding:60px 0;text-align:center;color:var(--muted)}
+.empty{text-align:center;align-items:center;padding-block:28px}
 
-.btn{border:0;border-radius:var(--r);min-height:68px;padding:14px 20px;font-size:22px;font-weight:700;cursor:pointer;width:100%;
-  display:flex;align-items:center;justify-content:center;gap:10px;text-align:center}
-.btn-main{background:var(--accent);color:var(--accent-ink)}
-.btn-main:disabled{opacity:.45;cursor:not-allowed}
-.btn-soft{background:var(--surface);color:var(--ink);border:2px solid var(--line)}
-.btn-ok{background:var(--ok);color:var(--surface)}
-.btn-danger{background:var(--bad-bg);color:var(--bad);border:2px solid var(--bad)}
-.link{border:0;background:none;color:var(--accent);font-size:18px;font-weight:500;padding:8px 0;cursor:pointer;text-decoration:underline;text-underline-offset:4px;min-height:44px}
+/* плитки */
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;gap:10px;min-width:0}
+.tile > svg.i{font-size:30px;color:#C9D0D8;margin-top:2px}
+.tile .k{font-size:15px;color:#C9D0D8}
+.tile .v{font-size:30px;font-weight:700;line-height:1.15}
+.tile .v.bad{color:var(--bad)}
+.tile .cmp{font-size:14px;color:var(--muted)}
+.up{color:var(--ok);font-weight:600} .down{color:var(--bad);font-weight:600}
+.okmark{width:28px;height:28px;border-radius:50%;border:2px solid var(--ok);color:var(--ok);display:grid;place-items:center;font-size:16px;margin-top:6px}
+.rev{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px}
+.rev > svg.i{font-size:36px;color:#C9D0D8}
+.rev .v{font-size:32px;font-weight:700;line-height:1.1}
+.rev .spark{width:120px;height:52px}
+.rev-note{font-size:15px;color:var(--muted)}
 
-/* gauge */
-.gauge{position:relative;height:30px;background:var(--sunk);border-radius:8px;overflow:visible;border:1px solid var(--line)}
-.gauge.sm{height:18px}
-.gauge-fill{position:absolute;inset:0 auto 0 0;border-radius:7px;background:var(--accent)}
-.gauge-fill.low{background:var(--warn)} .gauge-fill.crit{background:var(--bad)}
+/* остатки */
+.tanks{display:flex;flex-direction:column}
+.tank-row{display:grid;grid-template-columns:48px 1fr auto;align-items:center;gap:12px;padding:12px 0;border:0;border-top:1px solid var(--line);background:none;text-align:left;cursor:pointer;width:100%}
+.tank-row:first-child{border-top:0;padding-top:4px}
+.tank-ico{width:48px;height:48px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;font-size:26px;color:#C9D0D8}
+.tank-mid{display:flex;flex-direction:column;gap:8px;min-width:0}
+.tank-top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.tank-top b{font-size:20px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tank-top .pct{font-size:18px;font-weight:700;white-space:nowrap}
+.tank-l{font-size:15px;color:var(--muted)}
+.chev{font-size:22px;color:var(--muted)}
+.bar{height:10px;border-radius:6px;background:var(--surface-2);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:6px}
+
+/* шкала бочки (крупная) */
+.gauge-wrap{padding-bottom:22px}
+.gauge{position:relative;height:26px;background:var(--surface-2);border-radius:10px;border:1px solid var(--line)}
+.gauge.sm{height:14px}
+.gauge-fill{position:absolute;inset:0 auto 0 0;border-radius:9px}
 .gauge-max{position:absolute;top:-4px;bottom:-4px;width:0;border-left:2px dashed var(--muted)}
 .gauge-max span{position:absolute;top:100%;transform:translateX(-50%);font-size:13px;color:var(--muted);white-space:nowrap;padding-top:4px}
-.gauge-wrap{padding-bottom:20px}
 .tank-num{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
-.tank-num .of{font-size:18px;color:var(--muted)}
+.tank-num .of{font-size:17px;color:var(--muted)}
+.tank-line{font-size:16px;color:var(--muted)} .tank-line b{color:var(--ink)}
 
-/* slots */
-.slots{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.slot{border:2px solid var(--line);background:var(--surface);border-radius:var(--r);padding:12px 6px;min-height:96px;cursor:pointer;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:0}
-.slot b{font-size:21px} .slot span{font-size:17px;color:var(--muted)}
-.slot em{font-style:normal;font-size:14px;font-weight:700;color:var(--ok);margin-top:2px}
-.slot[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 2px var(--accent)}
+/* статусы сводок */
+.st-rows{display:flex;flex-direction:column;gap:12px}
+.st-r{display:flex;flex-direction:column;gap:8px;border:0;background:none;padding:0;text-align:left;cursor:pointer;width:100%}
+.st-r b{font-size:18px}
+.chips{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.chip{border-radius:10px;padding:7px 3px;text-align:center;font-size:13px;line-height:1.25;min-width:0;background:var(--surface-2);color:var(--muted)}
+.chip b{display:block;font-size:15px}
+.chip.ok{background:var(--ok-bg);color:var(--ok)} .chip.soon{background:var(--warn-bg);color:var(--warn)}
+.chip.late{background:var(--bad-bg);color:var(--bad)} .chip.none,.chip.wait{background:var(--surface-2);color:var(--muted)}
 
-/* meter input */
-.meter{width:100%;box-sizing:border-box;font-family:var(--f-num);font-size:40px;font-weight:700;text-align:center;letter-spacing:.06em;
-  padding:14px 10px;border-radius:var(--r);border:3px solid var(--ink);background:var(--sunk);font-variant-numeric:tabular-nums}
-.meter::placeholder{color:var(--muted);opacity:.5}
-.field{display:flex;flex-direction:column;gap:8px}
-.field label{font-size:19px;font-weight:700}
-.txt{width:100%;box-sizing:border-box;font-size:22px;padding:14px;border-radius:12px;border:2px solid var(--line);background:var(--sunk);min-height:60px}
-.prev{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:18px;color:var(--muted)}
-.prev .num{color:var(--ink);font-weight:700}
-.calc{border-radius:12px;padding:14px 16px;background:var(--sunk);display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
-.calc .v{font-family:var(--f-num);font-size:30px;font-weight:700}
-.calc.ok{background:var(--ok-bg)} .calc.ok .v{color:var(--ok)}
-.msg{border-radius:12px;padding:14px 16px;font-size:19px;font-weight:500}
-.msg.bad{background:var(--bad-bg);color:var(--bad)} .msg.warn{background:var(--warn-bg);color:var(--warn)} .msg.ok{background:var(--ok-bg);color:var(--ok)}
-.msg.info{background:var(--accent-soft);color:var(--ink)}
-
-/* owner */
-.sum{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.sum > div{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;min-width:0}
-.sum .v{font-family:var(--f-num);font-size:30px;font-weight:700;line-height:1.15}
-.sum .v.bad{color:var(--bad)} .sum .v.ok{color:var(--ok)}
+/* список заправок */
 .st-card{text-align:left;cursor:pointer;width:100%;font:inherit;color:inherit}
 .st-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
-.st-name{font-size:23px;font-weight:700;min-width:0}
-.st-total{font-family:var(--f-num);font-size:20px;font-weight:700}
-.chips{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.chip{border-radius:10px;padding:8px 6px;text-align:center;font-size:15px;line-height:1.25;min-width:0}
-.chip b{display:block;font-size:16px}
-.chip.ok{background:var(--ok-bg);color:var(--ok)} .chip.wait{background:var(--sunk);color:var(--muted)}
-.chip.soon{background:var(--warn-bg);color:var(--warn)} .chip.late{background:var(--bad-bg);color:var(--bad)}
-.badge{display:inline-block;border-radius:999px;padding:3px 10px;font-size:14px;font-weight:700;background:var(--bad-bg);color:var(--bad)}
-.tank-line{font-size:17px;color:var(--muted)} .tank-line b{color:var(--ink)}
+.st-name{font-size:22px;font-weight:700;min-width:0}
+.st-total{font-size:20px;font-weight:700}
+.badge{display:inline-block;border-radius:999px;padding:3px 10px;font-size:13px;font-weight:700;background:var(--bad-bg);color:var(--bad)}
+.sum{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sum > div{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;min-width:0}
+.sum .v{font-size:28px;font-weight:700;line-height:1.15}
+.sum .v.bad{color:var(--bad)} .sum .v.ok{color:var(--ok)}
 
-.tbl-wrap{overflow-x:auto;margin:0 -4px}
-table{border-collapse:collapse;width:100%;font-size:17px}
-th,td{padding:10px 6px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
-th:first-child,td:first-child{text-align:left}
-th{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:500}
-td.num{font-family:var(--f-num)} td.miss{color:var(--bad);font-family:var(--f-body)} td.tot{font-weight:700}
+/* кнопки */
+.btn{border:0;border-radius:16px;min-height:64px;padding:14px 20px;font-size:21px;font-weight:700;cursor:pointer;width:100%;
+  display:flex;align-items:center;justify-content:center;gap:10px;text-align:center;text-decoration:none;box-sizing:border-box}
+.btn svg.i{font-size:26px}
+.btn-main{background:linear-gradient(180deg,var(--accent-2),var(--accent));color:var(--accent-ink);box-shadow:0 8px 24px rgba(232,55,44,.35)}
+.btn-main:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+.btn-soft{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+.btn-ok{background:var(--ok);color:#06210F}
+.btn-danger{background:transparent;color:var(--bad);border:2px solid var(--bad)}
+.link{border:0;background:none;color:#FF8A7A;font-size:17px;font-weight:500;padding:8px 0;cursor:pointer;text-decoration:underline;text-underline-offset:4px;min-height:44px}
+.back{align-self:flex-start}
+.mini{border:1px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:10px;padding:8px 12px;font-size:15px;cursor:pointer;min-height:40px}
+.mini.danger{border-color:var(--bad);color:var(--bad);background:transparent}
+.foot{display:flex;justify-content:center}
 
-.list{display:flex;flex-direction:column}
-.list > div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:18px;flex-wrap:wrap}
-.list > div:last-child{border-bottom:0}
-.mini{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 12px;font-size:15px;cursor:pointer;min-height:40px}
-.mini.danger{border-color:var(--bad);color:var(--bad)}
+/* формы */
+.field{display:flex;flex-direction:column;gap:8px}
+.field label{font-size:19px;font-weight:700}
+.txt{width:100%;box-sizing:border-box;font-size:21px;padding:14px;border-radius:14px;border:1px solid var(--line);background:var(--sunk);min-height:58px;color:var(--ink)}
+.meter{width:100%;box-sizing:border-box;font-size:40px;font-weight:700;text-align:center;letter-spacing:.04em;font-variant-numeric:tabular-nums;
+  padding:14px 10px;border-radius:16px;border:2px solid #3A414B;background:var(--sunk);color:var(--ink)}
+.meter:focus{border-color:var(--accent-2)}
+.meter::placeholder,.txt::placeholder{color:#59616C}
+.prev{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:17px;color:var(--muted)}
+.prev .num{color:var(--ink);font-weight:700}
+.calc{border-radius:14px;padding:14px 16px;background:var(--surface-2);display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.calc .v{font-size:28px;font-weight:700}
+.calc.ok{background:var(--ok-bg)} .calc.ok .v{color:var(--ok)}
+.msg{border-radius:14px;padding:14px 16px;font-size:18px;font-weight:500}
+.msg.bad{background:var(--bad-bg);color:#FFB3AC} .msg.warn{background:var(--warn-bg);color:var(--warn)} .msg.ok{background:var(--ok-bg);color:#9BF0B7}
+.msg.info{background:var(--accent-soft);color:var(--ink)}
+.toggle{display:flex;align-items:center;gap:14px;font-size:18px;cursor:pointer;min-height:56px}
+.toggle input{width:28px;height:28px;accent-color:var(--accent);flex:none}
+.status{display:flex;flex-direction:column;gap:6px;font-size:17px}
+.status b{font-weight:700}
+.sync{font-size:14px;color:var(--muted);text-align:center}
+.notice{border:1px solid rgba(232,55,44,.5);background:linear-gradient(180deg,rgba(232,55,44,.14),rgba(232,55,44,.06))}
+.notice h2{font-size:21px}
+.okline{font-size:15px;color:var(--ok);text-align:center}
+ol.steps{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:8px;font-size:17px}
 
+/* выбор смены */
+.slots{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.slot{border:1px solid var(--line);background:var(--surface-2);border-radius:14px;padding:10px 2px;min-height:90px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:0;color:var(--ink)}
+.slot b{font-size:19px} .slot span{font-size:16px;color:var(--muted)}
+.slot em{font-style:normal;font-size:13px;font-weight:700;color:var(--ok);margin-top:2px}
+.slot[aria-pressed="true"]{border-color:var(--accent-2);background:var(--accent-soft);box-shadow:inset 0 0 0 2px var(--accent-2)}
 .picker{display:flex;flex-direction:column;gap:12px}
-.picker .btn{justify-content:flex-start;text-align:left;font-size:24px;min-height:80px}
+.picker .btn{justify-content:flex-start;text-align:left;font-size:23px;min-height:76px}
 
+/* готово */
 .done{align-items:center;text-align:center;padding-block:32px}
-.check{width:120px;height:120px;border-radius:50%;background:var(--ok);display:grid;place-items:center}
-.check svg{width:64px;height:64px}
+.check{width:116px;height:116px;border-radius:50%;background:var(--ok);display:grid;place-items:center;box-shadow:0 0 40px rgba(61,212,111,.35)}
+.check svg{width:62px;height:62px}
 @media (prefers-reduced-motion: no-preference){.check{animation:pop .35s ease-out}}
 @keyframes pop{from{transform:scale(.6);opacity:.4}to{transform:scale(1);opacity:1}}
 
-.banner{border-radius:12px;padding:12px 16px;background:var(--warn-bg);color:var(--warn);font-size:17px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
-.banner .mini{background:transparent;color:var(--warn);border-color:var(--warn)}
-.loading{padding:60px 0;text-align:center;color:var(--muted)}
-.empty{text-align:center;align-items:center;padding-block:28px}
-.stack{display:flex;flex-direction:column;gap:12px}
-.back{align-self:flex-start}
+/* таблицы и списки */
+.tbl-wrap{overflow-x:auto;margin:0 -4px}
+table{border-collapse:collapse;width:100%;font-size:16px}
+th,td{padding:10px 6px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:500}
+td.num{font-variant-numeric:tabular-nums} td.miss{color:var(--bad)} td.tot{font-weight:700}
+.list{display:flex;flex-direction:column}
+.list > div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line);font-size:17px;flex-wrap:wrap}
+.list > div:last-child{border-bottom:0}
 
-/* Светло-голубая тема: всегда светлая, даже если на телефоне включён тёмный режим */
-:root, :root:not([data-theme="light"]), :root[data-theme="dark"]{
-  --bg:#D6EAFB; --surface:#FFFFFF; --sunk:#EAF4FE; --ink:#0E1B24; --muted:#3D5870; --line:#B4D0EC;
-  --accent:#1450C8; --accent-ink:#FFFFFF; --accent-soft:#D2E4FC;
-  --ok:#1C7A49; --ok-bg:#DCF1E4; --warn:#8F5500; --warn-bg:#FCEDCF; --bad:#B0261D; --bad-bg:#FADFDB;
-  color-scheme:light;
-}
-body{background:linear-gradient(180deg,#CFE6FB 0%,#E4F1FD 100%) fixed,var(--bg)}
-.slots{grid-template-columns:repeat(4,1fr);gap:6px}
-.slot{padding:10px 2px;min-height:90px}
-.slot b{font-size:19px} .slot span{font-size:16px} .slot em{font-size:13px}
-.chips{grid-template-columns:repeat(4,1fr);gap:5px}
-.chip{font-size:13px;padding:7px 3px}
-.chip b{font-size:15px}
-/* шкала бочки: от тёмно-красного (пусто) до ярко-зелёного (100 %) */
-.gauge-fill{background-color:#7A0A0A;background-image:linear-gradient(90deg,#7A0A0A 0%,#D32F2F 8%,#F57C00 17%,#FBC02D 28%,#C6D930 42%,#7ED348 58%,#2FD95A 78%,#00E64D 100%);background-repeat:no-repeat;background-position:0 0}
-body{margin:0;padding-top:max(12px,env(safe-area-inset-top,0px))}
-ol.steps{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:8px;font-size:18px}
-ol.steps code{font-family:var(--f-num);font-size:16px;background:var(--sunk);padding:1px 6px;border-radius:6px}
-.toggle{display:flex;align-items:center;gap:14px;font-size:19px;cursor:pointer;min-height:56px}
-.toggle input{width:30px;height:30px;accent-color:var(--accent);flex:none}
-.status{display:flex;flex-direction:column;gap:6px;font-size:18px}
-.status b{font-weight:700}
-.sync{font-size:14px;color:var(--muted);text-align:center}
-.foot{display:flex;justify-content:center}
-.notice{border:2px solid var(--accent);background:var(--accent-soft)}
-.notice h2{font-size:22px}
-.okline{font-size:16px;color:var(--ok);text-align:center}
-.chip.none{background:var(--sunk);color:var(--muted)}
+/* аналитика */
+.an-seg{display:grid;grid-template-columns:repeat(3,1fr);background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:4px;gap:4px}
+.an-seg button{border:0;background:transparent;color:var(--muted);border-radius:10px;min-height:44px;font-size:17px;font-weight:600;cursor:pointer}
+.an-seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.fchips{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;margin:0 -2px}
+.fchips button{flex:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:8px 14px;font-size:16px;cursor:pointer;min-height:40px}
+.fchips button[aria-pressed="true"]{border-color:var(--accent-2);background:var(--accent-soft)}
+.chart{width:100%;height:auto;display:block}
+.chart text{fill:var(--muted);font-size:11px;font-family:var(--f-body)}
+.chart .vl{fill:var(--ink);font-size:11px;font-weight:600}
+.kv{display:flex;flex-direction:column}
+.kv > div{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.kv > div:first-child{border-top:0}
+.kv span{color:var(--muted);font-size:17px}
+.kv b{font-size:21px;text-align:right}
+.kv small{display:block;font-size:14px;font-weight:600;text-align:right}
+
+/* нижнее меню владельца */
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:20;background:rgba(17,20,24,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border-top:1px solid var(--line);padding:8px max(8px,env(safe-area-inset-right,0px)) calc(8px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px))}
+.nav-in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.nav button{border:0;background:none;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:3px;font-size:13px;font-weight:500;min-height:58px;cursor:pointer;border-radius:12px}
+.nav button svg.i{font-size:27px}
+.nav button[aria-current="page"]{color:var(--accent-2)}
+
 </style>
 </head>
 <body>
@@ -464,12 +515,37 @@ function setupView(){
 }
 
 // ---------- views ----------
+const IC = {
+  flame: '<svg class="flame" viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="fl" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#C4161C"/><stop offset=".6" stop-color="#FF4A2E"/><stop offset="1" stop-color="#FF8A4C"/></linearGradient></defs><path fill="url(#fl)" d="M21.5 2.5c1.2 5.6-1.6 8.6-4.4 11.8-2.6 3-5.6 6.2-5.6 11.6 0 6.6 5.1 11.6 11.2 11.6 6.6 0 11.3-5 11.3-11.5 0-4.6-2.2-8.1-4.4-10.6-.4 2.5-1.6 4.2-3.3 5 .8-5.9-1.7-12.6-4.8-17.9Z"/><path fill="#FFD3B8" opacity=".85" d="M22.6 22c.6 3-1.4 4.3-2.6 5.8-.9 1.1-1.3 2.1-1.3 3.3 0 2.4 1.9 4.2 4.3 4.2 2.6 0 4.4-1.9 4.4-4.4 0-3.7-2.6-6.4-4.8-8.9Z"/></svg>',
+  bell: '<svg class="i" viewBox="0 0 24 24"><path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9"/><path d="M10 20a2.2 2.2 0 0 0 4 0"/></svg>',
+  sliders: '<svg class="i" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg>',
+  pump: '<svg class="i" viewBox="0 0 24 24"><path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16M3 21h13M7 7h5"/><path d="M15 10h1.5a1.5 1.5 0 0 1 1.5 1.5V17a1.5 1.5 0 0 0 3 0V8l-3-3"/></svg>',
+  doc: '<svg class="i" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 11h7M9 15h7M9 19h4"/></svg>',
+  coins: '<svg class="i" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v4c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6M5 10v4c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6v-4M5 14v4c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6v-4"/></svg>',
+  tank: '<svg class="i" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="5"/><path d="M7 17v3M17 17v3M10 7V5h4v2"/></svg>',
+  home: '<svg class="i" viewBox="0 0 24 24"><path d="M3 11 12 3l9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg>',
+  chart: '<svg class="i" viewBox="0 0 24 24"><path d="M4 20h16M7 16v-5M12 16V6M17 16v-8"/></svg>',
+  gear: '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/></svg>',
+  truck: '<svg class="i" viewBox="0 0 24 24"><path d="M2 6h11v10H2zM13 10h4l3 3v3h-7"/><circle cx="6" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg>',
+  send: '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>',
+  chev: '<svg class="i" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>',
+};
+/** Цвет уровня: тёмно-красный у дна → жёлтый к 30 % → ярко-зелёный к 100 %. */
+function levelColor(pct){
+  const stops = [[0,[122,10,10]],[8,[211,47,47]],[17,[245,124,0]],[28,[251,192,45]],[42,[198,217,48]],[58,[126,211,72]],[78,[47,217,90]],[100,[0,230,77]]];
+  const p = Math.max(0, Math.min(100, pct));
+  for (let k = 1; k < stops.length; k++){
+    const [p1, c1] = stops[k], [p0, c0] = stops[k-1];
+    if (p <= p1){ const t = (p - p0) / (p1 - p0 || 1); return `rgb(${c0.map((v,i) => Math.round(v + (c1[i]-v)*t)).join(",")})`; }
+  }
+  return "rgb(0,230,77)";
+}
+function pctOf(st){ return st.capacity ? Math.max(0, Math.min(100, st.tank / st.capacity * 100)) : null; }
 function gauge(st, small){
   if (!st.capacity) return "";
   const pct = Math.max(0, Math.min(100, st.tank / st.capacity * 100));
-  const scale = (10000 / Math.max(pct, 0.5)).toFixed(1);   // градиент растянут на всю шкалу, заливка показывает её часть
   return `<div class="gauge-wrap"><div class="gauge${small ? " sm" : ""}" role="img" aria-label="Заполнено на ${fmt(pct)} %">
-    <div class="gauge-fill" style="width:${pct.toFixed(1)}%;background-size:${scale}% 100%"></div>
+    <div class="gauge-fill" style="width:${pct.toFixed(1)}%;background:${levelColor(pct)}"></div>
     <div class="gauge-max" style="left:${MAX_FILL}%"><span>макс. ${MAX_FILL}%</span></div></div></div>`;
 }
 function tankBlock(st){
@@ -489,7 +565,18 @@ function header(){
       <button type="button" data-act="mode" data-m="owner" aria-pressed="${S.mode==="owner"}">Владелец</button>
       <button type="button" data-act="mode" data-m="operator" aria-pressed="${S.mode==="operator"}">Оператор</button></div>` : "";
   const banner = S.demo ? `<div class="banner"><span>Пример: данные не сохраняются.</span></div>` : "";
-  return `<div class="top"><div class="brand"><i aria-hidden="true"></i>Сводки АГЗС</div>${seg}</div>${banner}`;
+  const ownerBtns = S.owner && S.mode === "owner" ? `<div class="head-btns">
+      <button type="button" class="icon-btn" data-act="nav" data-v="settings" aria-label="Уведомления">${IC.bell}${S.push !== "on" ? '<span class="dot"></span>' : ""}</button>
+      <button type="button" class="icon-btn" data-act="nav" data-v="settings" aria-label="Настройки">${IC.sliders}</button></div>` : "";
+  return `<div class="top"><div class="brand">${IC.flame}<div><b>Сводки АГЗС</b><span>${S.owner ? "Сеть газовых заправок" : "Сменные сводки"}</span></div></div>${ownerBtns}</div>${seg}${banner}`;
+}
+function heroTitle(sub, title, short){
+  return `<div class="hero-title${short ? " short" : ""}"><span class="d">${esc(sub)}</span><h1>${esc(title)}</h1></div>`;
+}
+function navBar(){
+  const v = S.view === "detail" || S.view === "add" ? "stations" : S.view;
+  const b = (id, ic, label) => `<button type="button" data-act="nav" data-v="${id}" ${v === id ? 'aria-current="page"' : ""}>${ic}<span>${label}</span></button>`;
+  return `<nav class="nav" aria-label="Разделы"><div class="nav-in">${b("home", IC.home, "Сводка")}${b("stations", IC.pump, "Заправки")}${b("analytics", IC.chart, "Аналитика")}${b("settings", IC.gear, "Настройки")}</div></nav>`;
 }
 function footer(){
   if (S.owner) return "";
@@ -504,7 +591,7 @@ function operatorView(){
   }
   const st = S.owner ? S.stations.find(s => s.id === S.sid) : S.stations[0];
   if (!st){
-    return `<h1 style="font-size:28px">Какую заправку открыть?</h1>
+    return `${heroTitle("Режим оператора", "Какую заправку открыть?", true)}
       <div class="picker">${S.stations.map(s => `<button type="button" class="btn btn-soft" data-act="pick" data-sid="${esc(s.id)}">${esc(s.name)}</button>`).join("")}</div>${footer()}`;
   }
   if (S.flash) return flashView(st);
@@ -520,8 +607,8 @@ function operatorView(){
   const prevLine = b.loSlot ? `<div class="prev"><span>В ${slotOf(b.loSlot).time} было</span><span class="num">${fmt(b.lo)} л</span></div>` : "";
 
   return `
-  <div class="today"><span class="d">${dayLong(now)} · ${timeStr(now)}</span>
-    <div class="row"><span class="t">${esc(st.name)}</span>${S.owner ? `<button type="button" class="link" data-act="unpick">Другая заправка</button>` : ""}</div></div>
+  ${heroTitle(dayLong(now) + " · " + timeStr(now), st.name)}
+  ${S.owner ? `<button type="button" class="link back" data-act="unpick">Другая заправка</button>` : ""}
   ${S.push !== "on" ? pushCard(false) : ""}
   <div class="card">
     <div class="label">Какую сводку отправляете</div>
@@ -538,9 +625,9 @@ function operatorView(){
     <div id="calc">${calcHtml(b, morning)}</div>
     ${morning ? fld("tank", "Остаток газа в бочке, л", "По уровнемеру на бочке.") + fld("cash", "Деньги в кассе, ₽", "Вся сумма, которая сейчас в кассе.") : ""}
     ${S.err ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}
-    <button type="submit" class="btn btn-main" ${S.busy ? "disabled" : ""}>${S.busy ? "Отправляю…" : S.confirm === "big" ? "Да, всё верно — отправить" : `Отправить сводку «${slot.label}»`}</button>
+    <button type="submit" class="btn btn-main" ${S.busy ? "disabled" : ""}>${S.busy ? "Отправляю…" : S.confirm === "big" ? "Да, всё верно — отправить" : `${IC.send} Отправить сводку «${slot.label}»`}</button>
   </form>
-  <button type="button" class="btn btn-soft" data-act="openDelivery">Приехал газовоз — записать привоз</button>
+  <button type="button" class="btn btn-soft" data-act="openDelivery">${IC.truck} Приехал газовоз</button>
   ${installCard()}${S.push === "on" ? pushCard(false) : ""}
   ${syncLine()}${footer()}`;
 }
@@ -587,7 +674,7 @@ function flashView(st){
 function opLoginView(){
   const o = S.opl;
   if (o.step === "pick"){
-    return `<h1 style="font-size:28px">Ваша заправка</h1>
+    return `${heroTitle("Шаг 2 из 2", "Ваша заправка", true)}
     <div class="card">
       <div class="field"><label for="who">Как вас зовут?</label>
         <p class="hint" style="margin:0">Чтобы владелец видел, чей это телефон.</p>
@@ -598,7 +685,7 @@ function opLoginView(){
     <div class="picker">${o.stations.map(s => `<button type="button" class="btn btn-soft" data-act="opPick" data-sid="${esc(s.id)}" ${S.busy ? "disabled" : ""}>${esc(s.name)}</button>`).join("")}</div>
     <button type="button" class="link back" data-act="opBack">← Назад</button>`;
   }
-  return `<h1 style="font-size:28px">Вход для оператора</h1>
+  return `${heroTitle("Сменные сводки", "Вход для оператора")}
   <form class="card" data-submit="opCode" novalidate>
     <div class="field"><label for="opCode">Код доступа</label>
       <p class="hint" style="margin:0">Код даёт владелец.</p>
@@ -643,51 +730,197 @@ function loginView(){
   </form>`;
 }
 
+/* ---------- расчёты для сводки и аналитики ---------- */
+/** Литры за рабочие сутки: утренний итог следующего дня, а пока его нет — последняя сводка этих суток. */
+function dayLiters(sid, day){
+  const m = findRep(sid, shiftDate(day, 1), "08");
+  if (m) return { v: m.value, closed: true };
+  let best = null;
+  for (const r of stReports(sid)) if (r.slot !== "08" && r.date === day && (!best || SLOT_RANK[r.slot] > SLOT_RANK[best.slot])) best = r;
+  return best ? { v: best.value, closed: false } : null;
+}
+const priceOf = st => Number(st && st.price) > 0 ? Number(st.price) : null;
+const hasPrices = () => S.stations.some(priceOf);
+/** Сегодня с 8:00 против вчера к тому же часу (по последней сводке каждой заправки). */
+function todayVsYesterday(){
+  const today = curWorkDay(), yday = shiftDate(today, -1);
+  let lt = 0, ly = 0, rt = 0, ry = 0, cmp = false;
+  for (const st of S.stations){
+    let best = null;
+    for (const r of stReports(st.id)) if (r.slot !== "08" && r.date === today && (!best || SLOT_RANK[r.slot] > SLOT_RANK[best.slot])) best = r;
+    const p = priceOf(st) || 0;
+    if (!best) continue;
+    lt += best.value; rt += best.value * p;
+    const y = findRep(st.id, yday, best.slot);
+    if (y){ ly += y.value; ry += y.value * p; cmp = true; }
+  }
+  return { lt, rt, dl: cmp && ly ? (lt / ly - 1) * 100 : null, dr: cmp && ry ? (rt / ry - 1) * 100 : null };
+}
+function deltaHtml(d, tail){
+  if (d == null || !isFinite(d)) return "";
+  const r = Math.round(d);
+  return `<span class="${r >= 0 ? "up" : "down"}">${r > 0 ? "+" : r < 0 ? "−" : ""}${fmt(Math.abs(r))} %</span>${tail ? ` <span class="cmp">${tail}</span>` : ""}`;
+}
+function sparkline(vals){
+  const v = vals.filter(x => x != null);
+  if (v.length < 2) return "";
+  const W = 120, H = 52, max = Math.max(...v), min = Math.min(...v), span = max - min || 1;
+  const pts = vals.map((x, i) => x == null ? null : [i / (vals.length - 1) * (W - 6) + 3, H - 6 - (x - min) / span * (H - 14)]).filter(Boolean);
+  const line = pts.map(p => p.map(n => n.toFixed(1)).join(",")).join(" ");
+  const last = pts[pts.length - 1];
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true"><defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3DD46F" stop-opacity=".35"/><stop offset="1" stop-color="#3DD46F" stop-opacity="0"/></linearGradient></defs>
+    <polygon fill="url(#sg)" points="${pts[0][0].toFixed(1)},${H} ${line} ${last[0].toFixed(1)},${H}"/>
+    <polyline fill="none" stroke="#3DD46F" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" points="${line}"/>
+    <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5" fill="#3DD46F"/></svg>`;
+}
+/** Литры и выручка сети по закрытым суткам за последние n дней (для графика). */
+function networkDays(n, sid){
+  const today = curWorkDay(), out = [];
+  for (let i = n - 1; i >= 0; i--){
+    const d = shiftDate(today, -i); let l = 0, r = 0, any = false;
+    for (const st of S.stations){
+      if (sid && st.id !== sid) continue;
+      const x = dayLiters(st.id, d);
+      if (x){ any = true; l += x.v; r += x.v * (priceOf(st) || 0); }
+    }
+    out.push({ d, l: any ? l : null, r: any ? r : null, today: i === 0 });
+  }
+  return out;
+}
+
 function ownerView(){
   if (S.view === "add") return addView();
   if (S.view === "detail") return detailView();
   if (S.view === "settings") return settingsView();
-  const now = new Date(), date = workDate(now);
-  const pinWarn = (S.settings && S.settings.defaultPin ? `<div class="msg warn">Вы используете PIN 1234. Поменяйте его в начале кода и разверните новую версию.</div>` : "")
+  if (S.view === "stations") return stationsView();
+  if (S.view === "analytics") return analyticsView();
+  const date = workDate();
+  const warn = (S.settings && S.settings.defaultPin ? `<div class="msg warn">Вы используете PIN 1234. Смените его в «Настройках».</div>` : "")
     + (S.push !== "on" ? pushCard(true) : "");
+  const hero = heroTitle(dayLong(parseDate(date)), "Сводка за день");
   if (!S.stations.length){
-    return `${pinWarn}<div class="card empty"><h2>Добавьте первую заправку</h2>
-      <p class="hint" style="margin:0">Укажите объём бочки и сколько в ней газа сейчас. Дальше приложение считает само по сводкам операторов.</p>
-      <button type="button" class="btn btn-main" data-act="add">Добавить заправку</button></div>
-      <button type="button" class="btn btn-soft" data-act="settings">Уведомления и настройки</button>`;
+    return `${hero}${warn}<div class="card empty"><h2>Добавьте первую заправку</h2>
+      <p class="hint" style="margin:0">Укажите объём бочки, сколько в ней газа сейчас и цену литра. Дальше приложение считает само по сводкам операторов.</p>
+      <button type="button" class="btn btn-main" data-act="add">Добавить заправку</button></div>`;
   }
-  let total = 0, missing = 0, low = 0, cash = 0, anyCash = false;
-  const cards = S.stations.map(st => {
+  let missing = 0, low = 0, cash = 0, anyCash = false;
+  const statusRows = [], tankRows = [];
+  for (const st of S.stations){
     const states = SLOTS.map(s => ({ s, ...slotState(st.id, date, s) }));
-    const dayL = cumNow(st.id); total += dayL;
     missing += states.filter(x => x.st === "late").length;
-    const lvl = st.tank, pct = st.capacity ? lvl / st.capacity * 100 : null;
+    const pct = pctOf(st);
     if (pct != null && pct < LOW_PCT) low++;
-    const avg = avgDaily(st.id), days = avg ? Math.floor(Math.max(0,lvl)/avg) : null;
     const m = findRep(st.id, date, "08");
     if (m && m.cash != null){ cash += m.cash; anyCash = true; }
+    tankRows.push(`<button type="button" class="tank-row" data-act="detail" data-sid="${esc(st.id)}">
+      <span class="tank-ico">${IC.tank}</span>
+      <span class="tank-mid"><span class="tank-top"><b>${esc(st.name)}</b><span class="pct num">${pct != null ? fmt(pct) + " %" : ""}</span></span>
+        <span class="bar"><i style="width:${(pct ?? 0).toFixed(1)}%;background:${levelColor(pct ?? 0)}"></i></span>
+        <span class="tank-l num">≈ ${fmt(Math.max(0, st.tank))} л${st.capacity ? ` из ${fmt(st.capacity)}` : ""}</span></span>
+      <span class="chev">${IC.chev}</span></button>`);
+    statusRows.push(`<button type="button" class="st-r" data-act="detail" data-sid="${esc(st.id)}"><b>${esc(st.name)}</b>
+      <span class="chips">${states.map(x => `<span class="chip ${x.st}"><b>${x.s.label}</b>${
+        x.st === "ok" ? `<span class="num">${fmt(x.r.value)} л</span>` : x.st === "wait" ? `в ${x.s.time}` : x.st === "none" ? "—" : x.st === "soon" ? "ждём" : "нет"}</span>`).join("")}</span></button>`);
+  }
+  const cmp = todayVsYesterday();
+  const days = networkDays(8, null).slice(0, 7);
+  const prices = hasPrices();
+  const revCard = prices
+    ? `<div class="card"><div class="rev">${IC.coins}<div><div style="font-size:15px;color:#C9D0D8">Выручка с 8:00</div>
+        <div class="v num">${fmt(Math.round(cmp.rt))} ₽</div><div>${deltaHtml(cmp.dr, "к вчера")}</div></div>${sparkline(days.map(x => x.r))}</div>
+        ${anyCash ? `<div class="rev-note">Касса утром на всех заправках: <b class="num">${fmt(cash)} ₽</b></div>` : ""}</div>`
+    : `<div class="card"><div class="rev">${IC.coins}<div><div style="font-size:15px;color:#C9D0D8">Выручка</div><div class="rev-note">Укажите цену литра в настройках заправки — и здесь появится выручка.</div></div><span></span></div>
+        ${anyCash ? `<div class="rev-note">Касса утром на всех заправках: <b class="num">${fmt(cash)} ₽</b></div>` : ""}</div>`;
+  return `${hero}${warn}
+    <div class="tiles">
+      <div class="tile">${IC.pump}<div><div class="k">Продано с 8:00</div><div class="v num">${fmt(cmp.lt)} л</div><div class="cmp">${deltaHtml(cmp.dl, "к вчера")}</div></div></div>
+      <div class="tile">${IC.doc}<div><div class="k">Нет сводок</div>${missing ? `<div class="v bad num">${missing}</div><div class="cmp">просрочено</div>` : `<div class="okmark">✓</div>`}</div></div>
+    </div>
+    ${revCard}
+    ${low ? `<div class="msg bad">Мало газа на ${low === 1 ? "одной заправке" : low + " заправках"} — пора заказывать газовоз.</div>` : ""}
+    <div class="card"><div class="card-h">${IC.tank}Остатки газа в резервуарах</div><div class="tanks">${tankRows.join("")}</div></div>
+    <div class="card"><div class="card-h">${IC.doc}Сводки сегодня</div><div class="st-rows">${statusRows.join("")}</div></div>
+    ${syncLine()}`;
+}
+function stationsView(){
+  const date = workDate();
+  const cards = S.stations.map(st => {
+    const pct = pctOf(st), avg = avgDaily(st.id), days = avg ? Math.floor(Math.max(0, st.tank) / avg) : null;
+    const m = findRep(st.id, date, "08");
     const diff = m && m.diff != null ? Math.round(m.diff) : null;
-    const mLine = m ? `<div class="tank-line">Утром: бочка <b class="num">${fmt(m.tank)} л</b>${diff != null ? `, расчёт ${fmt(Math.round(m.expected))} л <span class="${Math.abs(diff) >= 50 ? "badge" : "num"}">${diff > 0 ? "+" : ""}${fmt(diff)} л</span>` : ""} · касса <b class="num">${fmt(m.cash)} ₽</b></div>` : "";
+    const p = priceOf(st), today = cumNow(st.id);
     return `<button type="button" class="card st-card" data-act="detail" data-sid="${esc(st.id)}">
-      <div class="st-head"><span class="st-name">${esc(st.name)}</span><span class="st-total">${fmt(dayL)} л</span></div>
-      <div class="tank-line">В бочке ≈ <b class="num">${fmt(Math.max(0,lvl))} л</b>${pct != null ? ` · ${fmt(pct)} %` : ""}${days != null ? ` · ≈ ${days} ${daysWord(days)}` : ""} ${pct != null && pct < LOW_PCT ? `<span class="badge">Мало газа</span>` : ""}</div>
+      <div class="st-head"><span class="st-name">${esc(st.name)}</span><span class="st-total num">${fmt(today)} л</span></div>
+      <div class="tank-line">В бочке ≈ <b class="num">${fmt(Math.max(0, st.tank))} л</b>${pct != null ? ` · ${fmt(pct)} %` : ""}${days != null ? ` · ≈ ${days} ${daysWord(days)}` : ""} ${pct != null && pct < LOW_PCT ? `<span class="badge">Мало газа</span>` : ""}</div>
       ${gauge(st, true)}
-      ${mLine}
-      <div class="chips">${states.map(x => `<div class="chip ${x.st}"><b>${x.s.label}</b>${
-        x.st === "ok" ? `<span class="num">${fmt(x.r.value)} л</span>${x.s.id === "08" ? "<br>за сутки" : "<br>с 8:00"}` : x.st === "wait" ? `в ${x.s.time}` : x.st === "none" ? "—" : x.st === "soon" ? "ждём" : "нет сводки"}</div>`).join("")}</div>
+      <div class="tank-line">${p ? `Цена <b class="num">${fmt(p, 2)} ₽/л</b> · выручка с 8:00 <b class="num">${fmt(Math.round(today * p))} ₽</b>` : "Цена литра не указана"}</div>
+      ${m ? `<div class="tank-line">Утром: бочка <b class="num">${fmt(m.tank)} л</b>${diff != null ? `, расчёт ${fmt(Math.round(m.expected))} л <span class="${Math.abs(diff) >= 50 ? "badge" : "num"}">${diff > 0 ? "+" : ""}${fmt(diff)} л</span>` : ""} · касса <b class="num">${fmt(m.cash)} ₽</b></div>` : ""}
     </button>`;
   }).join("");
-  return `${pinWarn}<div class="today"><span class="d">${dayLong(parseDate(date))}</span><span class="t">Сводка за день</span></div>
-    <div class="sum">
-      <div><div class="label">Продано с 8:00</div><div class="v">${fmt(total)} л</div></div>
-      <div><div class="label">Нет сводок</div><div class="v ${missing ? "bad" : "ok"}">${missing}</div></div>
-      ${anyCash ? `<div style="grid-column:1/-1"><div class="label">Касса утром, всего</div><div class="v">${fmt(cash)} ₽</div></div>` : ""}
-    </div>
-    ${low ? `<div class="msg bad">Мало газа на ${low === 1 ? "одной заправке" : low + " заправках"} — пора заказывать газовоз.</div>` : ""}
-    ${cards}
-    <button type="button" class="btn btn-soft" data-act="add">+ Добавить заправку</button>
-    <button type="button" class="btn btn-soft" data-act="settings">Уведомления и настройки</button>
-    ${syncLine()}`;
+  return `${heroTitle(S.stations.length + " " + (S.stations.length === 1 ? "заправка" : S.stations.length < 5 ? "заправки" : "заправок"), "Заправки", true)}
+    ${cards || `<div class="card empty"><h2>Заправок пока нет</h2></div>`}
+    <button type="button" class="btn btn-soft" data-act="add">+ Добавить заправку</button>`;
+}
+function analyticsView(){
+  const per = S.anPer || "week", sid = S.anSid || null;
+  const st = sid ? S.stations.find(x => x.id === sid) : null;
+  const stList = st ? [st] : S.stations;
+  const pr = x => (st ? priceOf(st) : null);
+  let bars = [], labels = [], title = "";
+  let curL = 0, curR = 0, prevL = null, prevR = null, nDays = 0;
+  if (per === "day"){
+    const d = curWorkDay(), parts = [["14","8–14"],["18","14–18"],["22","18–22"],["08","22–8"]];
+    title = "Сегодня по сменам, литры";
+    for (const [slot, lab] of parts){
+      let v = 0, any = false;
+      for (const s2 of stList){
+        const r = slot === "08" ? findRep(s2.id, shiftDate(d, 1), "08") : findRep(s2.id, d, slot);
+        if (r && r.sold != null){ v += r.sold; any = true; curR += r.sold * (priceOf(s2) || 0); }
+      }
+      bars.push(any ? v : null); labels.push(lab); if (any) curL += v;
+    }
+    const y = shiftDate(d, -1); prevL = 0; prevR = 0; let anyY = false;
+    for (const s2 of stList){ const x = dayLiters(s2.id, y); if (x){ anyY = true; } }
+    // сравнение со вчера к тому же часу
+    const c = st ? null : todayVsYesterday();
+    if (c){ prevL = c.dl; prevR = c.dr; } else { prevL = null; prevR = null; }
+    nDays = 1;
+  } else {
+    const n = per === "week" ? 7 : 30;
+    title = per === "week" ? "Последние 7 суток, литры" : "Последние 30 суток, литры";
+    const cur = networkDays(n, sid), prev = networkDays(2 * n, sid).slice(0, n);
+    cur.forEach(x => { bars.push(x.l); labels.push(x.d); if (x.l != null){ curL += x.l; curR += x.r; nDays++; } });
+    const pl = prev.filter(x => x.l != null);
+    if (pl.length >= Math.max(1, nDays * 0.7)){ const sl = pl.reduce((a, x) => a + x.l, 0), sr = pl.reduce((a, x) => a + x.r, 0); prevL = sl ? (curL / sl - 1) * 100 : null; prevR = sr ? (curR / sr - 1) * 100 : null; }
+  }
+  // график
+  const W = 340, H = 180, padB = 26, padT = 18, n = bars.length, gap = n > 10 ? 3 : 10;
+  const bw = (W - gap * (n - 1)) / n, max = Math.max(1, ...bars.filter(v => v != null));
+  const svgBars = bars.map((v, i) => {
+    const x = i * (bw + gap), h = v == null ? 0 : Math.max(2, v / max * (H - padB - padT)), y = H - padB - h;
+    const lab = per === "day" ? labels[i] : per === "week" ? new Intl.DateTimeFormat("ru-RU", { weekday: "short" }).format(parseDate(labels[i])) : (i % 5 === 4 || i === n - 1 ? String(parseDate(labels[i]).getDate()) : "");
+    const isToday = per !== "day" && i === n - 1;
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="${Math.min(4, bw / 3).toFixed(1)}" fill="${isToday ? "#7A2A26" : "#E8372C"}"/>
+      ${v != null && n <= 10 ? `<text class="vl" x="${(x + bw / 2).toFixed(1)}" y="${(y - 5).toFixed(1)}" text-anchor="middle">${fmt(v)}</text>` : ""}
+      <text x="${(x + bw / 2).toFixed(1)}" y="${H - 8}" text-anchor="middle">${esc(lab)}</text>`;
+  }).join("");
+  const chart = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}"><line x1="0" x2="${W}" y1="${H - padB}" y2="${H - padB}" stroke="#272C34"/>${svgBars}</svg>`;
+  const pricesOk = stList.some(priceOf);
+  const tail = per === "day" ? "к вчера" : per === "week" ? "к прошлой неделе" : "к прошлому месяцу";
+  const avg = nDays ? curL / nDays : null;
+  let cashLast = null;
+  for (const s2 of stList){ const m = stReports(s2.id).filter(r => r.slot === "08" && r.cash != null).sort((a, b) => a.date < b.date ? 1 : -1)[0]; if (m) cashLast = (cashLast || 0) + m.cash; }
+  return `${heroTitle(st ? st.name : "Вся сеть", "Аналитика", true)}
+    <div class="an-seg" role="group" aria-label="Период">${[["day","День"],["week","Неделя"],["month","Месяц"]].map(([k, l]) => `<button type="button" data-act="anPer" data-p="${k}" aria-pressed="${per === k}">${l}</button>`).join("")}</div>
+    ${S.stations.length > 1 ? `<div class="fchips">${[["", "Все"]].concat(S.stations.map(x => [x.id, x.name])).map(([id, nm]) => `<button type="button" data-act="anSid" data-sid="${esc(id)}" aria-pressed="${(sid || "") === id}">${esc(nm)}</button>`).join("")}</div>` : ""}
+    <div class="card"><div class="label">${esc(title)}</div>${chart}${per !== "day" ? `<div class="hint" style="font-size:14px">Тёмный столбец — сутки ещё идут.</div>` : ""}</div>
+    <div class="card"><div class="kv">
+      <div><span>Продано</span><b class="num">${fmt(curL)} л<small>${deltaHtml(prevL, tail)}</small></b></div>
+      <div><span>Выручка</span><b class="num">${pricesOk ? fmt(Math.round(curR)) + " ₽" : "—"}<small>${pricesOk ? deltaHtml(prevR, tail) : '<span class="cmp">укажите цену литра</span>'}</small></b></div>
+      ${per !== "day" ? `<div><span>В среднем за сутки</span><b class="num">${avg != null ? fmt(Math.round(avg)) + " л" : "—"}</b></div>` : ""}
+      <div><span>Касса (последнее утро)</span><b class="num">${cashLast != null ? fmt(cashLast) + " ₽" : "—"}</b></div>
+    </div></div>
+    <p class="hint" style="margin:0;font-size:14px">Выручка считается по текущей цене литра каждой заправки.</p>`;
 }
 function detailView(){
   const st = S.stations.find(s => s.id === S.detailSid);
@@ -707,7 +940,7 @@ function detailView(){
   });
   const dl = S.deliveries.filter(d => d.sid === st.id).sort((a,b) => b.at - a.at).slice(0, 8);
   const c = S.confirm;
-  return `<button type="button" class="link back" data-act="home">← Все заправки</button>
+  return `<button type="button" class="link back" data-act="nav" data-v="stations">← Все заправки</button>
   <h1 style="font-size:28px">${esc(st.name)}</h1>
   ${tankBlock(st)}
   ${devicesCard(st)}
@@ -729,6 +962,7 @@ function detailView(){
   <form class="card" data-submit="settingsSt" novalidate><div class="label">Настройки заправки</div>
     <div class="field"><label for="setName">Название</label><input id="setName" class="txt" data-f="setName" autocomplete="off" value="${esc(S.form.setName ?? st.name)}"></div>
     <div class="field"><label for="setCap">Объём бочки, л</label><input id="setCap" class="txt num" data-f="setCap" inputmode="decimal" autocomplete="off" value="${esc(S.form.setCap ?? (st.capacity || ""))}"></div>
+    <div class="field"><label for="setPrice">Цена литра, ₽</label><input id="setPrice" class="txt num" data-f="setPrice" inputmode="decimal" autocomplete="off" value="${esc(S.form.setPrice ?? (st.price || ""))}"></div>
     ${S.err ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}
     <button type="submit" class="btn btn-soft" ${S.busy ? "disabled" : ""}>Сохранить настройки</button>
     <button type="button" class="btn btn-danger" data-act="delSt">${c === "st" ? "Точно удалить? Нажмите ещё раз" : "Удалить заправку"}</button></form>`;
@@ -736,12 +970,13 @@ function detailView(){
 function addView(){
   const f = (id, label, hint, num) => `<div class="field"><label for="${id}">${label}</label>${hint ? `<p class="hint" style="margin:0">${hint}</p>` : ""}
     <input id="${id}" class="txt${num ? " num" : ""}" data-f="${id}" ${num ? 'inputmode="decimal"' : ""} autocomplete="off" value="${esc(S.form[id] || "")}"></div>`;
-  return `<button type="button" class="link back" data-act="home">← Назад</button>
+  return `<button type="button" class="link back" data-act="nav" data-v="stations">← Назад</button>
   <h1 style="font-size:28px">Новая заправка</h1>
   <form class="card" data-submit="addSt" novalidate>
     ${f("stName","Название","Как операторы её называют, например «АГЗС на Южной».")}
     ${f("stCap","Объём бочки, л","По паспорту ёмкости.",true)}
     ${f("stLevel","Сколько газа в бочке сейчас, л","",true)}
+    ${f("stPrice","Цена литра, ₽","Для подсчёта выручки. Можно указать позже.",true)}
     ${f("stSold","Сколько уже продано с 8:00 сегодня, л","Цифра смены на колонке. Если не знаете, оставьте пустым.",true)}
     ${S.err ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}
     <button type="submit" class="btn btn-main" ${S.busy ? "disabled" : ""}>${S.busy ? "Сохраняю…" : "Добавить заправку"}</button>
@@ -750,8 +985,7 @@ function addView(){
 function settingsView(){
   const s = S.settings || {};
   const link = opLink();
-  return `<button type="button" class="link back" data-act="home">← Назад</button>
-  <h1 style="font-size:28px">Уведомления и настройки</h1>
+  return `${heroTitle("Уведомления, коды, сервер", "Настройки", true)}
   ${S.note ? `<div class="msg ok">${esc(S.note)}</div>` : ""}
   ${S.err ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}
   <form class="card" data-submit="opPin" novalidate><div class="label">Код для операторов</div>
@@ -799,10 +1033,12 @@ function opLink(){
 
 function render(){
   const app = document.getElementById("app");
+  const nvh = document.getElementById("navHost"); if (nvh) nvh.innerHTML = ""; document.body.classList.remove("has-nav");
   const a = document.activeElement, fid = a && a.id, sel = a && typeof a.selectionStart === "number" ? [a.selectionStart, a.selectionEnd] : null;
   if (!S.api && !S.demo){ app.innerHTML = header() + setupView(); return; }
   if (!S.owner && !S.tok){
-    app.innerHTML = header() + (S.view === "login" ? loginView() : S.revoked ? revokedView() : opLoginView());
+    const b = S.view === "login" ? loginView() : S.revoked ? revokedView() : opLoginView();
+    app.innerHTML = (/hero-title/.test(b) ? `<div class="hero-bg${/hero-title short/.test(b) ? " short" : ""}" aria-hidden="true"></div>` : "") + header() + b;
     if (fid){ const el = document.getElementById(fid); if (el) el.focus({ preventScroll: true }); }
     return;
   }
@@ -812,7 +1048,14 @@ function render(){
       : `<div class="loading">Загрузка данных…</div>`);
     return;
   }
-  app.innerHTML = header() + (S.mode === "owner" && S.owner ? ownerView() : operatorView());
+  const ownerMode = S.mode === "owner" && S.owner;
+  const body = ownerMode ? ownerView() : operatorView();
+  const photo = /hero-title/.test(body) ? `<div class="hero-bg${/hero-title short/.test(body) ? " short" : ""}" aria-hidden="true"></div>` : "";
+  app.innerHTML = photo + header() + body;
+  document.body.classList.toggle("has-nav", ownerMode);
+  let nv = document.getElementById("navHost");
+  if (!nv){ nv = document.createElement("div"); nv.id = "navHost"; document.body.appendChild(nv); }
+  nv.innerHTML = ownerMode ? navBar() : "";
   if (fid){ const el = document.getElementById(fid); if (el && el !== document.body){ el.focus({ preventScroll: true }); if (sel && el.setSelectionRange) try { el.setSelectionRange(sel[0], sel[1]); } catch(e){} } }
 }
 
@@ -823,6 +1066,10 @@ const A = {
   pick(d){ S.sid = d.sid; lsSet("agzs.sid", d.sid); S.view = "home"; S.opSlot = null; S.form = {}; quietSync(); },
   unpick(){ S.sid = null; lsSet("agzs.sid", null); },
   slot(d){ S.opSlot = d.slot; S.form.liters = S.form.tank = S.form.cash = ""; S.confirm = null; S.err = null; },
+  nav(d){ S.view = d.v; S.mode = "owner"; S.err = null; S.note = null; S.confirm = null; S.form = {}; top0();
+    if (d.v === "settings") return run(async () => { S.settings = await call("getSettings", S.pin); }); },
+  anPer(d){ S.anPer = d.p; },
+  anSid(d){ S.anSid = d.sid || null; },
   home(){ S.view = "home"; S.err = null; S.note = null; S.confirm = null; S.form = {}; top0(); },
   reload(){ S.loadErr = null; S.push = pushStatus(); if (S.push === "on") quietSync(); refresh(); return Promise.resolve(); },
   openDelivery(){ S.view = "delivery"; S.form.dl = ""; S.err = null; },
@@ -864,7 +1111,7 @@ const A = {
   delSt(){
     if (S.confirm !== "st"){ S.confirm = "st"; return; }
     const id = S.detailSid; S.confirm = null;
-    return run(async () => { applyState(await call("deleteStation", S.pin, id)); S.view = "home"; });
+    return run(async () => { applyState(await call("deleteStation", S.pin, id)); S.view = "stations"; });
   },
   delDl(d){
     if (S.confirm !== "dl:" + d.id){ S.confirm = "dl:" + d.id; return; }
@@ -931,13 +1178,13 @@ const SUBMIT = {
     return run(async () => { S.settings = await call("setOpPin", S.pin, code); S.form.newOpPin = ""; S.note = "Код для операторов изменён: " + code; });
   },
   addSt(){
-    const name = (S.form.stName || "").trim(), cap = parseNum(S.form.stCap), lvl = parseNum(S.form.stLevel), sold = parseNum(S.form.stSold);
+    const name = (S.form.stName || "").trim(), cap = parseNum(S.form.stCap), lvl = parseNum(S.form.stLevel), sold = parseNum(S.form.stSold), price = parseNum(S.form.stPrice);
     if (!name){ S.err = "Впишите название заправки."; render(); return; }
     if (!Number.isFinite(lvl) || lvl < 0){ S.err = "Впишите, сколько газа в бочке сейчас."; render(); return; }
     if (Number.isFinite(cap) && lvl > cap){ S.err = "Газа в бочке больше, чем её объём. Проверьте цифры."; render(); return; }
     return run(async () => {
-      applyState(await call("addStation", S.pin, { name, capacity: Number.isFinite(cap) ? cap : null, level: lvl, sold: Number.isFinite(sold) ? sold : 0 }));
-      S.view = "home"; S.form = {};
+      applyState(await call("addStation", S.pin, { name, capacity: Number.isFinite(cap) ? cap : null, level: lvl, sold: Number.isFinite(sold) ? sold : 0, price: Number.isFinite(price) && price > 0 ? price : null }));
+      S.view = "stations"; S.form = {};
     });
   },
   fix(){
@@ -947,9 +1194,9 @@ const SUBMIT = {
   },
   settingsSt(){
     const st = S.stations.find(s => s.id === S.detailSid); if (!st) return;
-    const name = (S.form.setName ?? st.name).trim(), cap = parseNum(S.form.setCap ?? st.capacity);
+    const name = (S.form.setName ?? st.name).trim(), cap = parseNum(S.form.setCap ?? st.capacity), price = parseNum(S.form.setPrice ?? st.price);
     if (!name){ S.err = "Название не может быть пустым."; render(); return; }
-    return run(async () => { applyState(await call("updateStation", S.pin, { id: st.id, name, capacity: Number.isFinite(cap) ? cap : null })); S.form.setName = undefined; S.form.setCap = undefined; });
+    return run(async () => { applyState(await call("updateStation", S.pin, { id: st.id, name, capacity: Number.isFinite(cap) ? cap : null, price: Number.isFinite(price) && price > 0 ? price : null })); S.form.setName = undefined; S.form.setCap = undefined; S.form.setPrice = undefined; S.note = "Сохранено."; });
   },
   setApi(){
     const id = idFromInput(S.form.apiIn);
@@ -997,8 +1244,8 @@ const Demo = {
     let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     const now = new Date(), today = curWorkDay(), start = parseDate(shiftDate(today, -8)).getTime() + 9*3600000;
     this.st = [
-      { id: "d1", name: "Промка (пример)", capacity: 10000, baseLevel: 9000, baseAt: start, baseCum: 0, createdAt: start },
-      { id: "d2", name: "У трассы (пример)", capacity: 20000, baseLevel: 17000, baseAt: start, baseCum: 0, createdAt: start + 1 },
+      { id: "d1", name: "Промка (пример)", capacity: 10000, price: 28.5, baseLevel: 9000, baseAt: start, baseCum: 0, createdAt: start },
+      { id: "d2", name: "У трассы (пример)", capacity: 20000, price: 29, baseLevel: 17000, baseAt: start, baseCum: 0, createdAt: start + 1 },
     ];
     this.del.push({ id: "v1", sid: "d1", liters: 5000, at: parseDate(shiftDate(today, -4)).getTime() + 14*3600000 });
     for (const st of this.st){
@@ -1038,8 +1285,8 @@ const Demo = {
       case "revokeDevice": case "restoreDevice": { const d = this.dev.find(x => x.dev === a[1]); if (d) d.active = fn === "restoreDevice"; return this.state(); }
       case "opStations": return this.st.map(s => ({ id: s.id, name: s.name }));
       case "opRegister": return { tok: "demo", sid: a[0].sid };
-      case "addStation": { const p = a[1], t = Date.now(); this.st.push({ id: "d" + t, name: p.name, capacity: p.capacity, baseLevel: p.level, baseAt: t, baseCum: p.sold || 0, createdAt: t }); return this.state(); }
-      case "updateStation": { const s = this.st.find(x => x.id === a[1].id); Object.assign(s, { name: a[1].name, capacity: a[1].capacity }); return this.state(); }
+      case "addStation": { const p = a[1], t = Date.now(); this.st.push({ id: "d" + t, name: p.name, capacity: p.capacity, price: p.price, baseLevel: p.level, baseAt: t, baseCum: p.sold || 0, createdAt: t }); return this.state(); }
+      case "updateStation": { const s = this.st.find(x => x.id === a[1].id); Object.assign(s, { name: a[1].name, capacity: a[1].capacity, price: a[1].price }); return this.state(); }
       case "fixTank": { const o = this.st.find(x => x.id === a[1].id); Object.assign(o, { baseLevel: a[1].level, baseAt: Date.now(), baseCum: cumNow(o.id) }); return this.state(); }
       case "deleteStation": this.st = this.st.filter(x => x.id !== a[1]); return this.state();
       case "deleteDelivery": this.del = this.del.filter(x => x.id !== a[1]); return this.state();

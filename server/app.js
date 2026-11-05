@@ -5,7 +5,7 @@
  */
 
 /* ======== НАСТРОЙКИ ======== */
-const APP_VERSION = '05.11.2026 12:34';
+const APP_VERSION = '05.11.2026 12:57';
 const OWNER_PIN_DEFAULT = '1234';    // используется, только если PIN ещё не сохранён загрузчиком
 const OPERATOR_PIN = '704747';       // код входа для операторов (можно поменять в приложении)
 const TZ = 'Europe/Samara';          // часовой пояс заправок
@@ -22,17 +22,17 @@ const SLOT_IDS = SLOTS.map(s => s.id);
 const REMIND2_AFTER = 30;   // мин: повторное напоминание оператору
 const SUMMARY_AFTER = 45;   // мин после срока: сводка владельцу
 const LOW_PCT = 20;         // % — «мало газа»
-const REPORT_DAYS = 45;
+const REPORT_DAYS = 70;
 
 const NAMES = { st: 'Заправки', rep: 'Сводки за смены', del: 'Привозы', dev: 'Устройства' };
 const HEAD = {
-  st:  ['id', 'Название', 'Объём бочки, л', '—', 'Газ в бочке (замер владельца), л', 'Замер: время', 'Замер: литров с 8:00', 'Добавлена', 'Удалена'],
+  st:  ['id', 'Название', 'Объём бочки, л', 'Цена литра, ₽', 'Газ в бочке (замер владельца), л', 'Замер: время', 'Замер: литров с 8:00', 'Добавлена', 'Удалена'],
   rep: ['Ключ', 'id заправки', 'Заправка', 'Дата', 'Смена', 'Литры (18/22 — с 8:00, утро — за сутки)', 'Остаток в бочке, л', 'Расчётный остаток, л', 'Расхождение, л', 'Касса, ₽', 'Отправлено'],
   del: ['id', 'id заправки', 'Заправка', 'Литры', 'Время'],
   dev: ['id телефона', 'Ключ', 'id заправки', 'Заправка', 'Кто', 'Владелец', 'Подключён', 'Был в сети', 'Статус', 'Адрес уведомлений', 'Устройство'],
 };
 const FMT = {
-  st:  ['@', '@', '0', '0.##', '0', 'dd.MM.yyyy HH:mm', '0.##', 'dd.MM.yyyy HH:mm', 'dd.MM.yyyy HH:mm'],
+  st:  ['@', '@', '0', '0.00', '0', 'dd.MM.yyyy HH:mm', '0.##', 'dd.MM.yyyy HH:mm', 'dd.MM.yyyy HH:mm'],
   rep: ['@', '@', '@', '@', '@', '0.##', '0', '0', '+0;-0;0', '#,##0', 'dd.MM.yyyy HH:mm'],
   del: ['@', '@', '@', '0', 'dd.MM.yyyy HH:mm'],
   dev: ['@', '@', '@', '@', '@', '@', 'dd.MM.yyyy HH:mm', 'dd.MM.yyyy HH:mm', '@', '@', '@'],
@@ -182,6 +182,7 @@ function book_() {
 function ensureSheets_(ss) {
   let created = false;
   const st0 = ss.getSheetByName(NAMES.st);
+  if (st0 && st0.getLastRow() >= 1 && String(st0.getRange(1, 4).getValue()) === '—') st0.getRange(1, 4).setValue('Цена литра, ₽');
   if (st0 && st0.getLastRow() >= 1 && String(st0.getRange(1, 4).getValue()) === 'Счётчик при добавлении') {
     // переход со счётчика колонки на литры смены: старые показания счётчика больше не нужны
     st0.getRange(1, 1, 1, HEAD.st.length).setValues([HEAD.st]);
@@ -230,7 +231,7 @@ function withLock_(fn) {
 
 function readStations_() {
   return values_('st').map((r, i) => ({
-    row: i + 2, id: String(r[0]), name: String(r[1]), capacity: num_(r[2]),
+    row: i + 2, id: String(r[0]), name: String(r[1]), capacity: num_(r[2]), price: num_(r[3]),
     baseLevel: Number(r[4]) || 0, baseAt: ms_(r[5]), baseCum: Number(r[6]) || 0, createdAt: ms_(r[7]), deleted: !!r[8],
   })).filter(s => s.id);
 }
@@ -283,7 +284,7 @@ function getState(onlySid) {
   const mine = x => !onlySid || x.sid === onlySid;
   return {
     stations: d.stations.filter(s => !s.deleted && (!onlySid || s.id === onlySid)).map(s => ({
-      id: s.id, name: s.name, capacity: s.capacity, tank: s.tank, tankFrom: s.tankFrom, tankAt: s.tankAt, createdAt: s.createdAt,
+      id: s.id, name: s.name, capacity: s.capacity, price: s.price, tank: s.tank, tankFrom: s.tankFrom, tankAt: s.tankAt, createdAt: s.createdAt,
     })),
     reports: d.reports.filter(r => r.date >= cutoff && mine(r)).map(r => ({
       key: r.key, sid: r.sid, date: r.date, slot: r.slot, value: r.value, sold: r.sold, day: r.day, at: r.at,
@@ -389,7 +390,8 @@ function addStation(pin, p) {
     if (!name) fail_('Впишите название заправки.');
     if (!isFinite(lvl) || lvl < 0) fail_('Впишите, сколько газа в бочке.');
     const now = new Date();
-    writeRow_('st', null, [Utilities.getUuid().slice(0, 8), name, cap, '', lvl, now, sold, now, '']);
+    const price = num_(p && p.price);
+    writeRow_('st', null, [Utilities.getUuid().slice(0, 8), name, cap, price > 0 ? price : '', lvl, now, sold, now, '']);
     return getState();
   });
 }
@@ -403,7 +405,8 @@ function updateStation(pin, p) {
   return withLock_(() => {
     const st = findStation_(p && p.id), name = String(p.name || '').trim();
     if (!name) fail_('Название не может быть пустым.');
-    sheet_('st').getRange(st.row, 2, 1, 2).setValues([[name, num_(p.capacity)]]);
+    const price = num_(p.price);
+    sheet_('st').getRange(st.row, 2, 1, 3).setValues([[name, num_(p.capacity), price > 0 ? price : '']]);
     return getState();
   });
 }
@@ -558,13 +561,14 @@ function summary_(date, s) {
   if (!sts.length) return;
   const p = date.split('-').map(Number);
   const dueMs = Date.UTC(p[0], p[1] - 1, p[2], s.h) - tzOffsetMs_(new Date());
-  let total = 0, cash = 0, missing = 0, bigDiff = false; const low = [];
+  let total = 0, cash = 0, missing = 0, bigDiff = false, rev = 0, anyPrice = false; const low = [];
   const lines = sts.filter(st => !(st.createdAt > dueMs)).map(st => {
     const r = d.reports.find(x => x.sid === st.id && x.date === date && x.slot === s.id);
     const pct = st.capacity ? Math.round(st.tank / st.capacity * 100) : null;
     if (pct != null && pct < LOW_PCT) low.push(st.name);
     if (!r) { missing++; return st.name + ': НЕТ СВОДКИ'; }
     total += r.value;
+    if (st.price > 0) { rev += r.value * st.price; anyPrice = true; }
     if (s.id !== '08') return st.name + ': ' + fmt_(r.value) + ' л с 8:00 · в бочке ≈ ' + fmt_(Math.max(0, Math.round(st.tank))) + ' л' + (pct != null ? ' (' + pct + '%)' : '');
     cash += r.cash || 0;
     const diff = r.diff == null ? null : Math.round(r.diff);
@@ -574,8 +578,8 @@ function summary_(date, s) {
   });
   if (!lines.length) return;
   const title = s.id === '08'
-    ? 'Итог за сутки: ' + fmt_(total) + ' л · касса ' + fmt_(cash) + ' ₽' + (missing ? ' · нет сводок: ' + missing : '')
-    : 'Сводка ' + s.time + ': ' + fmt_(total) + ' л с 8:00' + (missing ? ' · нет сводок: ' + missing : '');
+    ? 'Итог за сутки: ' + fmt_(total) + ' л' + (anyPrice ? ' · выручка ' + fmt_(Math.round(rev)) + ' ₽' : '') + ' · касса ' + fmt_(cash) + ' ₽' + (missing ? ' · нет сводок: ' + missing : '')
+    : 'Сводка ' + s.time + ': ' + fmt_(total) + ' л с 8:00' + (anyPrice ? ' · ' + fmt_(Math.round(rev)) + ' ₽' : '') + (missing ? ' · нет сводок: ' + missing : '');
   let body = lines.join('\n');
   if (low.length) body += '\nМало газа: ' + low.join(', ');
   if (bigDiff) body += '\nЕсть расхождение по бочке — проверьте.';
