@@ -319,7 +319,7 @@ const ARGS = {
   deleteStation: (pin, id) => ({ pin, id }), deleteDelivery: (pin, id) => ({ pin, id }),
   subscribe: o => o, testPush: (pin, dev) => ({ pin, dev }),
   opStations: code => ({ code }), opRegister: o => o,
-  setOpPin: (pin, code) => ({ pin, code }), revokeDevice: (pin, target) => ({ pin, target }), restoreDevice: (pin, target) => ({ pin, target }),
+  setOpPin: (pin, code) => ({ pin, code }), setOwnerPin: (pin, code) => ({ pin, code }), reloadServer: pin => ({ pin }), revokeDevice: (pin, target) => ({ pin, target }), restoreDevice: (pin, target) => ({ pin, target }),
 };
 const OWNER_AUTO_PIN = ["getState", "submitReport", "addDelivery"];
 function setTok(t){ S.tok = t || null; lsSet("agzs.tok", S.tok); }
@@ -773,6 +773,15 @@ function settingsView(){
     <p class="hint" style="margin:0">Все сводки и привозы хранятся в вашей Google Таблице.</p>
     ${s.sheetUrl ? `<a class="btn btn-soft" href="${esc(s.sheetUrl)}" target="_blank" rel="noopener" style="text-decoration:none">Открыть таблицу</a>` : ""}
   </div>
+  <form class="card" data-submit="ownerPin" novalidate><div class="label">PIN владельца</div>
+    <div class="field"><label for="newOwnerPin">Новый PIN</label><input id="newOwnerPin" class="txt num" type="password" data-f="newOwnerPin" inputmode="numeric" autocomplete="off" value="${esc(S.form.newOwnerPin || "")}"></div>
+    <button type="submit" class="btn btn-soft" ${S.busy ? "disabled" : ""}>Сменить PIN</button>
+  </form>
+  <div class="card"><div class="label">Сервер</div>
+    <div class="status"><div>Версия: <b>${esc(s.serverVersion || "старая")}</b></div>
+      <div>${s.selfUpdate ? "Обновляется сам с GitHub, обычно в течение 10 минут." : "Обновления пока ставятся вручную."}</div></div>
+    ${s.selfUpdate ? `<button type="button" class="btn btn-soft" data-act="reloadServer" ${S.busy ? "disabled" : ""}>Обновить сервер сейчас</button>` : ""}
+  </div>
   <button type="button" class="btn btn-danger" data-act="logout">Выйти из режима владельца</button>`;
 }
 function opLink(){
@@ -827,6 +836,7 @@ const A = {
       applyState(await call("getState"));
     });
   },
+  reloadServer(){ return run(async () => { S.note = await call("reloadServer", S.pin); S.settings = await call("getSettings", S.pin); }); },
   revokeDev(d){
     if (S.confirm !== "rv:" + d.id){ S.confirm = "rv:" + d.id; return; }
     S.confirm = null; return run(async () => applyState(await call("revokeDevice", S.pin, d.id)));
@@ -901,6 +911,11 @@ const SUBMIT = {
       const list = await call("opStations", code);
       S.opl = { step: "pick", code, stations: list }; S.form = {}; top0();
     });
+  },
+  ownerPin(){
+    const code = (S.form.newOwnerPin || "").trim();
+    if (!/^\d{4,8}$/.test(code)){ S.err = "PIN — от 4 до 8 цифр."; render(); return; }
+    return run(async () => { S.settings = await call("setOwnerPin", S.pin, code); S.pin = code; lsSet("agzs.pin", code); S.form.newOwnerPin = ""; S.note = "PIN владельца изменён."; });
   },
   opPin(){
     const code = (S.form.newOpPin || "").trim();
@@ -1010,6 +1025,8 @@ const Demo = {
       case "ownerLogin": return { ...settings, tok: "demo" };
       case "getSettings": case "setEmail": return settings;
       case "setOpPin": this.opPin = a[1]; return { ...settings, opPin: a[1] };
+      case "setOwnerPin": return settings;
+      case "reloadServer": return "В примере сервер не обновляется.";
       case "revokeDevice": case "restoreDevice": { const d = this.dev.find(x => x.dev === a[1]); if (d) d.active = fn === "restoreDevice"; return this.state(); }
       case "opStations": return this.st.map(s => ({ id: s.id, name: s.name }));
       case "opRegister": return { tok: "demo", sid: a[0].sid };
