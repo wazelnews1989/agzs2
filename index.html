@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Сводки АГЗС</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1450C8">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;700&family=JetBrains+Mono:wght@500;700&family=Unbounded:wght@600&display=swap">
+<style>
+html{-webkit-text-size-adjust:100%}
+/* Layout: one phone-width column, big tap targets, summary first; meter digits set like a pump counter. */
+:root{
+  --bg:#EDF1F4; --surface:#FFFFFF; --sunk:#E2E8ED; --ink:#0E1B24; --muted:#4A5C69; --line:#C6D1D9;
+  --accent:#1450C8; --accent-ink:#FFFFFF; --accent-soft:#DCE6FA;
+  --ok:#1C7A49; --ok-bg:#DCF1E4; --warn:#8F5500; --warn-bg:#FCEDCF; --bad:#B0261D; --bad-bg:#FADFDB;
+  --f-display:"Unbounded","Golos Text",system-ui,sans-serif;
+  --f-body:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-num:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --r:14px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0C151B; --surface:#152029; --sunk:#0F1920; --ink:#E7EDF1; --muted:#9CADBA; --line:#2B3A45;
+  --accent:#7AA2FF; --accent-ink:#061024; --accent-soft:#1B2B4D;
+  --ok:#62CF93; --ok-bg:#12321F; --warn:#F1B451; --warn-bg:#372810; --bad:#FF8B80; --bad-bg:#3C1613;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0C151B; --surface:#152029; --sunk:#0F1920; --ink:#E7EDF1; --muted:#9CADBA; --line:#2B3A45;
+  --accent:#7AA2FF; --accent-ink:#061024; --accent-soft:#1B2B4D;
+  --ok:#62CF93; --ok-bg:#12321F; --warn:#F1B451; --warn-bg:#372810; --bad:#FF8B80; --bad-bg:#3C1613;
+  color-scheme:dark}
+
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:20px;line-height:1.4;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 40px}
+#app{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+h1,h2,h3{margin:0;text-wrap:balance}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{font-family:var(--f-display);font-size:17px;letter-spacing:.02em;display:flex;align-items:center;gap:10px}
+.brand i{width:26px;height:26px;border-radius:50%;background:var(--accent);display:inline-block;position:relative}
+.brand i::after{content:"";position:absolute;inset:6px 9px 5px;border-radius:50% 50% 45% 45%;background:var(--accent-ink)}
+.seg{display:flex;background:var(--sunk);border-radius:12px;padding:4px;gap:4px}
+.seg button{border:0;background:transparent;padding:8px 14px;border-radius:9px;font-size:16px;font-weight:500;color:var(--muted);cursor:pointer;min-height:40px}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgb(0 0 0 / .12)}
+
+.today{display:flex;flex-direction:column;gap:2px}
+.today .d{font-size:18px;color:var(--muted)}
+.today .t{font-family:var(--f-display);font-size:26px}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px;display:flex;flex-direction:column;gap:14px}
+.label{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:500}
+.hint{font-size:17px;color:var(--muted)}
+.big{font-size:40px;font-weight:700;line-height:1.1}
+.row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+
+.btn{border:0;border-radius:var(--r);min-height:68px;padding:14px 20px;font-size:22px;font-weight:700;cursor:pointer;width:100%;
+  display:flex;align-items:center;justify-content:center;gap:10px;text-align:center}
+.btn-main{background:var(--accent);color:var(--accent-ink)}
+.btn-main:disabled{opacity:.45;cursor:not-allowed}
+.btn-soft{background:var(--surface);color:var(--ink);border:2px solid var(--line)}
+.btn-ok{background:var(--ok);color:var(--surface)}
+.btn-danger{background:var(--bad-bg);color:var(--bad);border:2px solid var(--bad)}
+.link{border:0;background:none;color:var(--accent);font-size:18px;font-weight:500;padding:8px 0;cursor:pointer;text-decoration:underline;text-underline-offset:4px;min-height:44px}
+
+/* gauge */
+.gauge{position:relative;height:30px;background:var(--sunk);border-radius:8px;overflow:visible;border:1px solid var(--line)}
+.gauge.sm{height:18px}
+.gauge-fill{position:absolute;inset:0 auto 0 0;border-radius:7px;background:var(--accent)}
+.gauge-fill.low{background:var(--warn)} .gauge-fill.crit{background:var(--bad)}
+.gauge-max{position:absolute;top:-4px;bottom:-4px;width:0;border-left:2px dashed var(--muted)}
+.gauge-max span{position:absolute;top:100%;transform:translateX(-50%);font-size:13px;color:var(--muted);white-space:nowrap;padding-top:4px}
+.gauge-wrap{padding-bottom:20px}
+.tank-num{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.tank-num .of{font-size:18px;color:var(--muted)}
+
+/* slots */
+.slots{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.slot{border:2px solid var(--line);background:var(--surface);border-radius:var(--r);padding:12px 6px;min-height:96px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:0}
+.slot b{font-size:21px} .slot span{font-size:17px;color:var(--muted)}
+.slot em{font-style:normal;font-size:14px;font-weight:700;color:var(--ok);margin-top:2px}
+.slot[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 2px var(--accent)}
+
+/* meter input */
+.meter{width:100%;box-sizing:border-box;font-family:var(--f-num);font-size:40px;font-weight:700;text-align:center;letter-spacing:.06em;
+  padding:14px 10px;border-radius:var(--r);border:3px solid var(--ink);background:var(--sunk);font-variant-numeric:tabular-nums}
+.meter::placeholder{color:var(--muted);opacity:.5}
+.field{display:flex;flex-direction:column;gap:8px}
+.field label{font-size:19px;font-weight:700}
+.txt{width:100%;box-sizing:border-box;font-size:22px;padding:14px;border-radius:12px;border:2px solid var(--line);background:var(--sunk);min-height:60px}
+.prev{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:18px;color:var(--muted)}
+.prev .num{color:var(--ink);font-weight:700}
+.calc{border-radius:12px;padding:14px 16px;background:var(--sunk);display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.calc .v{font-family:var(--f-num);font-size:30px;font-weight:700}
+.calc.ok{background:var(--ok-bg)} .calc.ok .v{color:var(--ok)}
+.msg{border-radius:12px;padding:14px 16px;font-size:19px;font-weight:500}
+.msg.bad{background:var(--bad-bg);color:var(--bad)} .msg.warn{background:var(--warn-bg);color:var(--warn)} .msg.ok{background:var(--ok-bg);color:var(--ok)}
+.msg.info{background:var(--accent-soft);color:var(--ink)}
+
+/* owner */
+.sum{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sum > div{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;min-width:0}
+.sum .v{font-family:var(--f-num);font-size:30px;font-weight:700;line-height:1.15}
+.sum .v.bad{color:var(--bad)} .sum .v.ok{color:var(--ok)}
+.st-card{text-align:left;cursor:pointer;width:100%;font:inherit;color:inherit}
+.st-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.st-name{font-size:23px;font-weight:700;min-width:0}
+.st-total{font-family:var(--f-num);font-size:20px;font-weight:700}
+.chips{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.chip{border-radius:10px;padding:8px 6px;text-align:center;font-size:15px;line-height:1.25;min-width:0}
+.chip b{display:block;font-size:16px}
+.chip.ok{background:var(--ok-bg);color:var(--ok)} .chip.wait{background:var(--sunk);color:var(--muted)}
+.chip.soon{background:var(--warn-bg);color:var(--warn)} .chip.late{background:var(--bad-bg);color:var(--bad)}
+.badge{display:inline-block;border-radius:999px;padding:3px 10px;font-size:14px;font-weight:700;background:var(--bad-bg);color:var(--bad)}
+.tank-line{font-size:17px;color:var(--muted)} .tank-line b{color:var(--ink)}
+
+.tbl-wrap{overflow-x:auto;margin:0 -4px}
+table{border-collapse:collapse;width:100%;font-size:17px}
+th,td{padding:10px 6px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:500}
+td.num{font-family:var(--f-num)} td.miss{color:var(--bad);font-family:var(--f-body)} td.tot{font-weight:700}
+
+.list{display:flex;flex-direction:column}
+.list > div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:18px;flex-wrap:wrap}
+.list > div:last-child{border-bottom:0}
+.mini{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 12px;font-size:15px;cursor:pointer;min-height:40px}
+.mini.danger{border-color:var(--bad);color:var(--bad)}
+
+.picker{display:flex;flex-direction:column;gap:12px}
+.picker .btn{justify-content:flex-start;text-align:left;font-size:24px;min-height:80px}
+
+.done{align-items:center;text-align:center;padding-block:32px}
+.check{width:120px;height:120px;border-radius:50%;background:var(--ok);display:grid;place-items:center}
+.check svg{width:64px;height:64px}
+@media (prefers-reduced-motion: no-preference){.check{animation:pop .35s ease-out}}
+@keyframes pop{from{transform:scale(.6);opacity:.4}to{transform:scale(1);opacity:1}}
+
+.banner{border-radius:12px;padding:12px 16px;background:var(--warn-bg);color:var(--warn);font-size:17px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.banner .mini{background:transparent;color:var(--warn);border-color:var(--warn)}
+.loading{padding:60px 0;text-align:center;color:var(--muted)}
+.empty{text-align:center;align-items:center;padding-block:28px}
+.stack{display:flex;flex-direction:column;gap:12px}
+.back{align-self:flex-start}
+
+body{margin:0;padding-top:max(12px,env(safe-area-inset-top,0px))}
+ol.steps{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:8px;font-size:18px}
+ol.steps code{font-family:var(--f-num);font-size:16px;background:var(--sunk);padding:1px 6px;border-radius:6px}
+.toggle{display:flex;align-items:center;gap:14px;font-size:19px;cursor:pointer;min-height:56px}
+.toggle input{width:30px;height:30px;accent-color:var(--accent);flex:none}
+.status{display:flex;flex-direction:column;gap:6px;font-size:18px}
+.status b{font-weight:700}
+.sync{font-size:14px;color:var(--muted);text-align:center}
+.foot{display:flex;justify-content:center}
+.notice{border:2px solid var(--accent);background:var(--accent-soft)}
+.notice h2{font-size:22px}
+.okline{font-size:16px;color:var(--ok);text-align:center}
+.chip.none{background:var(--sunk);color:var(--muted)}
+</style>
+</head>
+<body>
+<div id="app"><div class="loading">Загрузка…</div></div>
+<script>
+(() => {
+"use strict";
+const SLOTS = [
+  { id: "08", label: "Утро",  time: "8:00",  due: 8  },
+  { id: "18", label: "Вечер", time: "18:00", due: 18 },
+  { id: "22", label: "Ночь",  time: "22:00", due: 22 },
+];
+const MAX_FILL = 85, LATE_MIN = 45, BIG_LITERS = 8000, LOW_PCT = 20;
+
+const S = {
+  ready: false, loadErr: null, demo: false, lastSync: 0,
+  stations: [], reports: [], deliveries: [],
+  pin: lsGet("agzs.pin"), owner: false, settings: null, note: null,
+  api: null, dev: null, vapid: null, push: "unsupported", installEvt: null,
+  mode: "operator", view: "home", sid: lsGet("agzs.sid"), opSlot: null,
+  detailSid: null, flash: null, form: {}, confirm: null, err: null, busy: false,
+};
+
+// ---------- helpers ----------
+function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+function lsSet(k,v){ try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k,v); } catch(e){} }
+const pad = n => String(n).padStart(2,"0");
+const dkey = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+function workDate(now = new Date()){ const d = new Date(now); if (d.getHours() < 4) d.setDate(d.getDate()-1); return dkey(d); }
+function autoSlot(now = new Date()){ const h = now.getHours(); if (h < 4) return "22"; if (h < 13) return "08"; if (h < 20) return "18"; return "22"; }
+function shiftDate(key, days){ const [y,m,d] = key.split("-").map(Number); const x = new Date(y, m-1, d); x.setDate(x.getDate()+days); return dkey(x); }
+function parseDate(key){ const [y,m,d] = key.split("-").map(Number); return new Date(y, m-1, d); }
+const fmt = (n, dec = 0) => Number.isFinite(n) ? n.toLocaleString("ru-RU", { maximumFractionDigits: dec }) : "—";
+const parseNum = s => { if (s == null) return NaN; const t = String(s).replace(/[\s ]/g,"").replace(",","."); return t === "" ? NaN : Number(t); };
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const cap1 = s => s.charAt(0).toUpperCase() + s.slice(1);
+const dayLong = d => cap1(new Intl.DateTimeFormat("ru-RU",{weekday:"long",day:"numeric",month:"long"}).format(d));
+const dayShort = key => new Intl.DateTimeFormat("ru-RU",{weekday:"short",day:"numeric",month:"short"}).format(parseDate(key));
+const timeStr = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const slotOf = id => SLOTS.find(s => s.id === id);
+function daysWord(n){ const a = n % 10, b = n % 100; if (a === 1 && b !== 11) return "день"; if (a >= 2 && a <= 4 && (b < 12 || b > 14)) return "дня"; return "дней"; }
+
+// ---------- station data (рассчитано сервером) ----------
+function stReports(sid){ return S.reports.filter(r => r.sid === sid).sort((a,b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0); }
+function prevMeterFor(st, key){
+  if (!st.lastKey || key > st.lastKey) return st.lastMeter;
+  const rs = stReports(st.id).filter(r => r.key < key);
+  return rs.length ? rs[rs.length-1].meter : st.startMeter;
+}
+function nextMeterFor(st, key){ const rs = stReports(st.id).filter(r => r.key > key); return rs.length ? rs[0].meter : null; }
+function avgDaily(sid){
+  const t = {}; for (const r of stReports(sid)) t[r.date] = (t[r.date] || 0) + r.liters;
+  const today = workDate(); let sum = 0, n = 0;
+  for (let i = 1; i <= 7; i++){ const k = shiftDate(today, -i); if (t[k] != null){ sum += t[k]; n++; } }
+  return n ? sum / n : null;
+}
+function slotState(sid, date, slot){
+  const r = S.reports.find(x => x.sid === sid && x.date === date && x.slot === slot.id);
+  if (r) return { st: "ok", r };
+  const due = parseDate(date); due.setHours(slot.due, 0, 0, 0);
+  const now = Date.now();
+  const stn = S.stations.find(x => x.id === sid);
+  if (stn && stn.createdAt && stn.createdAt > due.getTime()) return { st: "none" };
+  if (now < due.getTime()) return { st: "wait" };
+  if (now < due.getTime() + LATE_MIN*60000) return { st: "soon" };
+  return { st: "late" };
+}
+
+// ---------- сервер ----------
+const ARGS = {
+  getState: () => ({}), submitReport: p => ({ p }), addDelivery: p => ({ p }),
+  ownerLogin: pin => ({ pin }), getSettings: pin => ({ pin }), setEmail: (pin, on) => ({ pin, on }),
+  addStation: (pin, p) => ({ pin, p }), updateStation: (pin, p) => ({ pin, p }), fixTank: (pin, p) => ({ pin, p }),
+  deleteStation: (pin, id) => ({ pin, id }), deleteDelivery: (pin, id) => ({ pin, id }),
+  subscribe: o => o, testPush: (pin, dev) => ({ pin, dev }),
+};
+async function call(fn, ...args){
+  if (S.demo) return Demo.call(fn, args);
+  const body = JSON.stringify({ a: fn, ...ARGS[fn](...args) });
+  let r;
+  try { r = await fetch(S.api, { method: "POST", body, redirect: "follow" }); }
+  catch(e){ throw new Error("Нет связи. Проверьте интернет и нажмите ещё раз."); }
+  let j = null; try { j = await r.json(); } catch(e){}
+  if (!j) throw new Error("Сервер не ответил. Проверьте адрес сервера или попробуйте позже.");
+  if (!j.ok) throw new Error(j.error || "Ошибка сервера.");
+  return j.data;
+}
+function errText(e){
+  const m = (e && e.message) || String(e || "");
+  if (!m || /network|Failed to fetch|timeout|HTTP 0/i.test(m)) return "Нет связи. Проверьте интернет и нажмите ещё раз.";
+  return m.replace(/^(?:[A-Za-z]*Error|Exception):\s*/, "");
+}
+function applyState(st){
+  if (!st) return;
+  S.stations = (st.stations || []).sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
+  S.reports = st.reports || []; S.deliveries = st.deliveries || [];
+  if (st.vapid) S.vapid = st.vapid;
+  S.ready = true; S.loadErr = null; S.lastSync = Date.now();
+}
+async function refresh(){
+  try { applyState(await call("getState")); }
+  catch(e){ if (!S.ready) S.loadErr = errText(e); }
+  render();
+}
+async function run(fn){
+  if (S.busy) return; S.busy = true; S.err = null; S.errAt = null; S.note = null; render();
+  try { await fn(); } catch(e){ S.err = errText(e); }
+  S.busy = false; render();
+}
+
+// ---------- уведомления ----------
+const API_BASE = "https://script.google.com/macros/s/";
+function apiFromId(id){ return API_BASE + id + "/exec"; }
+function idFromInput(v){
+  v = String(v || "").trim();
+  const m = /\/macros\/s\/([\w-]{20,})\/(?:exec|dev)/.exec(v);
+  if (m) return m[1];
+  return /^[\w-]{20,}$/.test(v) ? v : null;
+}
+function pushSupported(){ return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }
+function b64ToBytes(b){ const p = "=".repeat((4 - b.length % 4) % 4); const r = atob((b + p).replace(/-/g,"+").replace(/_/g,"/")); return Uint8Array.from(r, c => c.charCodeAt(0)); }
+function sameKey(buf, b64){ if (!buf) return false; const a = new Uint8Array(buf), k = b64ToBytes(b64); return a.length === k.length && a.every((x,i) => x === k[i]); }
+let swReg = null;
+async function registerSW(){
+  if (!("serviceWorker" in navigator) || S.demo) return;
+  try {
+    swReg = await navigator.serviceWorker.register("sw.js?api=" + encodeURIComponent(S.api) + "&dev=" + encodeURIComponent(S.dev), { scope: "./" });
+  } catch(e){ swReg = null; }
+}
+function pushStatus(){
+  if (S.demo) return "default";
+  if (!pushSupported() || !swReg) return "unsupported";
+  return Notification.permission === "granted" ? "on" : Notification.permission;
+}
+/** Подписывает телефон и сообщает серверу, кому он принадлежит. ask=true — спросить разрешение. */
+async function syncPush(ask){
+  if (S.demo){ S.push = "on"; return; }
+  if (!pushSupported() || !swReg || !S.vapid){ S.push = "unsupported"; return; }
+  if (Notification.permission !== "granted"){
+    if (!ask){ S.push = Notification.permission; return; }
+    const p = await Notification.requestPermission();
+    if (p !== "granted"){ S.push = p; return; }
+  }
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (sub && !sameKey(sub.options && sub.options.applicationServerKey, S.vapid)){ await sub.unsubscribe(); sub = null; }
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(S.vapid) });
+  await call("subscribe", { dev: S.dev, sub: sub.toJSON(), sid: S.sid || "", owner: S.owner, pin: S.owner ? S.pin : "" });
+  S.push = "on";
+}
+function quietSync(){ syncPush(false).then(render, () => {}); }
+function pushCard(forOwner){
+  const st = S.push;
+  if (st === "on") return `<div class="okline">✓ Уведомления на этом телефоне включены</div>`;
+  if (st === "unsupported") return `<div class="msg warn">Этот браузер не умеет показывать уведомления. Откройте приложение в Google Chrome.</div>`;
+  if (st === "denied") return `<div class="card notice"><h2>Уведомления запрещены</h2>
+    <p class="hint" style="margin:0">Нажмите на значок замка рядом с адресом сайта → «Уведомления» → «Разрешить». Потом вернитесь сюда.</p>
+    <button type="button" class="btn btn-soft" data-act="reload">Я разрешил — проверить</button></div>`;
+  return `<div class="card notice"><h2>Включите уведомления</h2>
+    <p class="hint" style="margin:0">${forOwner ? "Сюда будут приходить сводки по всем заправкам и тревоги." : "Телефон напомнит в 8:00, 18:00 и 22:00, если сводка ещё не отправлена."}</p>
+    <button type="button" class="btn btn-main" data-act="enablePush" ${S.busy ? "disabled" : ""}>Включить уведомления</button>
+    ${S.err && S.errAt === "push" ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}</div>`;
+}
+function installCard(){
+  if (!S.installEvt) return "";
+  return `<button type="button" class="btn btn-soft" data-act="install">Установить значок на экран телефона</button>`;
+}
+function setupView(){
+  return `<h1 style="font-size:28px">Подключение к серверу</h1>
+  <form class="card" data-submit="setApi" novalidate>
+    <p class="hint" style="margin:0">Вставьте ссылку веб-приложения из Google Apps Script. Она выглядит так: script.google.com/macros/s/…/exec</p>
+    <div class="field"><label for="apiIn">Адрес сервера</label>
+      <input id="apiIn" class="txt" data-f="apiIn" autocomplete="off" inputmode="url" value="${esc(S.form.apiIn || "")}"></div>
+    ${S.err ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}
+    <button type="submit" class="btn btn-main" ${S.busy ? "disabled" : ""}>${S.busy ? "Проверяю…" : "Подключить"}</button>
+  </form>
+  <p class="hint">Операторам это делать не нужно: они открывают готовую ссылку от владельца.</p>`;
+}
+
+// ---------- views ----------
+function gauge(st, small){
+  if (!st.capacity) return "";
+  const pct = Math.max(0, Math.min(100, st.tank / st.capacity * 100));
+  const cls = pct < 15 ? "crit" : pct < 30 ? "low" : "";
+  return `<div class="gauge-wrap"><div class="gauge${small ? " sm" : ""}" role="img" aria-label="Заполнено на ${fmt(pct)} %">
+    <div class="gauge-fill ${cls}" style="width:${pct.toFixed(1)}%"></div>
+    <div class="gauge-max" style="left:${MAX_FILL}%"><span>макс. ${MAX_FILL}%</span></div></div></div>`;
+}
+function tankBlock(st){
+  const lvl = st.tank, avg = avgDaily(st.id);
+  const days = avg && avg > 0 ? Math.floor(Math.max(0,lvl) / avg) : null;
+  return `<div class="card">
+    <div class="label">Газ в бочке сейчас</div>
+    <div class="tank-num"><span class="big num">${fmt(Math.max(0,lvl))} л</span>${st.capacity ? `<span class="of">из ${fmt(st.capacity)} л · ${fmt(lvl/st.capacity*100)} %</span>` : ""}</div>
+    ${gauge(st)}
+    ${days != null ? `<div class="hint">Хватит примерно на ${days} ${daysWord(days)} (в среднем ${fmt(avg)} л в сутки)</div>` : ""}
+    ${lvl < 0 ? `<div class="msg warn">Уровень ниже нуля — похоже, не записан привоз газа или неверно задан начальный уровень.</div>` : ""}
+  </div>`;
+}
+function header(){
+  const seg = S.owner ? `<div class="seg" role="group" aria-label="Режим">
+      <button type="button" data-act="mode" data-m="owner" aria-pressed="${S.mode==="owner"}">Владелец</button>
+      <button type="button" data-act="mode" data-m="operator" aria-pressed="${S.mode==="operator"}">Оператор</button></div>` : "";
+  const banner = S.demo ? `<div class="banner"><span>Пример: данные не сохраняются.</span></div>` : "";
+  return `<div class="top"><div class="brand"><i aria-hidden="true"></i>Сводки АГЗС</div>${seg}</div>${banner}`;
+}
+function footer(){
+  if (S.owner) return "";
+  return `<div class="foot"><button type="button" class="link" data-act="login">Вход для владельца</button></div>`;
+}
+
+function operatorView(){
+  if (S.view === "login") return loginView();
+  if (!S.stations.length){
+    return `<div class="card empty"><h2>Заправок пока нет</h2><p class="hint" style="margin:0">Владелец ещё не добавил заправки в приложение.</p>
+      <button type="button" class="btn btn-soft" data-act="reload">Обновить</button></div>${footer()}`;
+  }
+  const st = S.stations.find(s => s.id === S.sid);
+  if (!st){
+    return `<h1 style="font-size:28px">Выберите вашу заправку</h1>
+      <p class="hint" style="margin:0">Телефон запомнит выбор, спрашивать больше не будет.</p>
+      <div class="picker">${S.stations.map(s => `<button type="button" class="btn btn-soft" data-act="pick" data-sid="${esc(s.id)}">${esc(s.name)}</button>`).join("")}</div>${footer()}`;
+  }
+  if (S.flash) return flashView(st);
+  if (S.view === "delivery") return deliveryView(st);
+
+  const now = new Date(), date = workDate(now);
+  const slotId = S.opSlot || autoSlot(now);
+  const slot = slotOf(slotId), key = `${date}_${slotId}`;
+  const existing = S.reports.find(r => r.sid === st.id && r.key === key);
+  const prev = prevMeterFor(st, key);
+
+  return `
+  <div class="today"><span class="d">${dayLong(now)} · ${timeStr(now)}</span>
+    <div class="row"><span class="t">${esc(st.name)}</span><button type="button" class="link" data-act="unpick">Другая заправка</button></div></div>
+  ${S.push !== "on" ? pushCard(false) : ""}
+  ${tankBlock(st)}
+  <div class="card">
+    <div class="label">Какую сводку отправляете</div>
+    <div class="slots">${SLOTS.map(s => {
+      const done = S.reports.some(r => r.sid === st.id && r.date === date && r.slot === s.id);
+      return `<button type="button" class="slot" data-act="slot" data-slot="${s.id}" aria-pressed="${s.id===slotId}">
+        <b>${s.label}</b><span>${s.time}</span>${done ? "<em>✓ отправлена</em>" : ""}</button>`; }).join("")}</div>
+  </div>
+  <form class="card" data-submit="report" novalidate>
+    ${existing ? `<div class="msg ok">Сводка «${slot.label}» уже отправлена в ${timeStr(new Date(existing.at))}: продано ${fmt(existing.liters,1)} л. Если ошиблись — введите правильное показание.</div>` : ""}
+    <div class="field">
+      <label for="meter">Показание счётчика колонки</label>
+      <div class="prev"><span>Прошлое показание</span><span class="num">${fmt(prev,2)}</span></div>
+      <input id="meter" class="meter" data-f="meter" inputmode="decimal" autocomplete="off" placeholder="${esc(fmt(prev,0))}" value="${esc(S.form.meter || "")}">
+    </div>
+    <div id="calc">${calcHtml(st, key, prev)}</div>
+    ${S.err ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}
+    <button type="submit" class="btn btn-main" ${S.busy ? "disabled" : ""}>${S.busy ? "Отправляю…" : S.confirm === "big" ? "Да, всё верно — отправить" : `Отправить сводку «${slot.label}»`}</button>
+  </form>
+  <button type="button" class="btn btn-soft" data-act="openDelivery">Приехал газовоз — записать привоз</button>
+  ${installCard()}${S.push === "on" ? pushCard(false) : ""}
+  ${syncLine()}${footer()}`;
+}
+function syncLine(){
+  if (!S.lastSync) return "";
+  return `<div class="sync">Обновлено в ${timeStr(new Date(S.lastSync))} · <button type="button" class="link" style="font-size:14px;min-height:0;padding:0" data-act="reload">обновить</button></div>`;
+}
+function calcHtml(st, key, prev){
+  const v = parseNum(S.form.meter);
+  if (!Number.isFinite(v)) return `<div class="calc"><span>Продано за смену</span><span class="v">— л</span></div>`;
+  const next = nextMeterFor(st, key);
+  if (v < prev) return `<div class="msg bad" role="alert">Число меньше прошлого показания (${fmt(prev,2)}). Проверьте цифры на счётчике.</div>`;
+  if (next != null && v > next) return `<div class="msg bad" role="alert">Число больше, чем в следующей сводке (${fmt(next,2)}). Проверьте цифры.</div>`;
+  const l = v - prev;
+  return `<div class="calc ok"><span>Продано за смену</span><span class="v">${fmt(l,1)} л</span></div>
+    ${l > BIG_LITERS ? `<div class="msg warn">Это очень много для одной смены. Проверьте, нет ли лишней цифры.</div>` : ""}`;
+}
+function updateCalc(){
+  const st = S.stations.find(s => s.id === S.sid); const el = document.getElementById("calc"); if (!st || !el) return;
+  const key = `${workDate()}_${S.opSlot || autoSlot()}`;
+  el.innerHTML = calcHtml(st, key, prevMeterFor(st, key));
+}
+function deliveryView(st){
+  return `<button type="button" class="link back" data-act="home">← Назад</button>
+  <h1 style="font-size:28px">Привоз газа</h1>
+  <form class="card" data-submit="delivery" novalidate>
+    <div class="field"><label for="dl">Сколько литров залили в бочку</label>
+      <p class="hint" style="margin:0">Цифра из накладной газовоза.</p>
+      <input id="dl" class="meter" data-f="dl" inputmode="decimal" autocomplete="off" placeholder="0" value="${esc(S.form.dl || "")}"></div>
+    ${S.err ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}
+    <button type="submit" class="btn btn-main" ${S.busy ? "disabled" : ""}>${S.busy ? "Записываю…" : "Записать привоз"}</button>
+  </form>`;
+}
+function flashView(st){
+  const f = S.flash;
+  const title = f.type === "report" ? "Сводка отправлена" : "Привоз записан";
+  const line = f.type === "report" ? `${f.label}: продано <b class="num">${fmt(f.liters,1)} л</b>` : `В бочку добавлено <b class="num">${fmt(f.liters)} л</b>`;
+  return `<div class="card done">
+    <div class="check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="var(--surface)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+    <h1 style="font-size:30px">${title}</h1>
+    <p style="margin:0;font-size:22px">${line}</p>
+    <p class="hint" style="margin:0">В бочке сейчас примерно <b class="num">${fmt(Math.max(0,st.tank))} л</b></p>
+    <button type="button" class="btn btn-ok" data-act="done">Готово</button>
+  </div>`;
+}
+function loginView(){
+  return `<button type="button" class="link back" data-act="home">← Назад</button>
+  <h1 style="font-size:28px">Вход для владельца</h1>
+  <form class="card" data-submit="login" novalidate>
+    <div class="field"><label for="pinIn">PIN владельца</label>
+      <input id="pinIn" class="meter" type="password" data-f="pinIn" inputmode="numeric" autocomplete="off" value="${esc(S.form.pinIn || "")}"></div>
+    ${S.err ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}
+    <button type="submit" class="btn btn-main" ${S.busy ? "disabled" : ""}>${S.busy ? "Проверяю…" : "Войти"}</button>
+  </form>`;
+}
+
+function ownerView(){
+  if (S.view === "add") return addView();
+  if (S.view === "detail") return detailView();
+  if (S.view === "settings") return settingsView();
+  const now = new Date(), date = workDate(now);
+  const pinWarn = (S.settings && S.settings.defaultPin ? `<div class="msg warn">Вы используете PIN 1234. Поменяйте его в начале кода и разверните новую версию.</div>` : "")
+    + (S.push !== "on" ? pushCard(true) : "");
+  if (!S.stations.length){
+    return `${pinWarn}<div class="card empty"><h2>Добавьте первую заправку</h2>
+      <p class="hint" style="margin:0">Укажите объём бочки, сколько в ней газа сейчас и показание счётчика колонки. Дальше приложение считает само.</p>
+      <button type="button" class="btn btn-main" data-act="add">Добавить заправку</button></div>
+      <button type="button" class="btn btn-soft" data-act="settings">Уведомления и настройки</button>`;
+  }
+  let total = 0, missing = 0, low = 0;
+  const cards = S.stations.map(st => {
+    const states = SLOTS.map(s => ({ s, ...slotState(st.id, date, s) }));
+    const dayL = states.reduce((a,x) => a + (x.r ? x.r.liters : 0), 0); total += dayL;
+    missing += states.filter(x => x.st === "late").length;
+    const lvl = st.tank, pct = st.capacity ? lvl / st.capacity * 100 : null;
+    if (pct != null && pct < LOW_PCT) low++;
+    const avg = avgDaily(st.id), days = avg ? Math.floor(Math.max(0,lvl)/avg) : null;
+    return `<button type="button" class="card st-card" data-act="detail" data-sid="${esc(st.id)}">
+      <div class="st-head"><span class="st-name">${esc(st.name)}</span><span class="st-total">${fmt(dayL)} л</span></div>
+      <div class="tank-line">В бочке <b class="num">${fmt(Math.max(0,lvl))} л</b>${pct != null ? ` · ${fmt(pct)} %` : ""}${days != null ? ` · ≈ ${days} ${daysWord(days)}` : ""} ${pct != null && pct < LOW_PCT ? `<span class="badge">Мало газа</span>` : ""}</div>
+      ${gauge(st, true)}
+      <div class="chips">${states.map(x => `<div class="chip ${x.st}"><b>${x.s.label}</b>${
+        x.st === "ok" ? `<span class="num">${fmt(x.r.liters)} л</span>` : x.st === "wait" ? `в ${x.s.time}` : x.st === "none" ? "—" : x.st === "soon" ? "ждём" : "нет сводки"}</div>`).join("")}</div>
+    </button>`;
+  }).join("");
+  return `${pinWarn}<div class="today"><span class="d">${dayLong(parseDate(date))}</span><span class="t">Сводка за день</span></div>
+    <div class="sum">
+      <div><div class="label">Продано сегодня</div><div class="v">${fmt(total)} л</div></div>
+      <div><div class="label">Нет сводок</div><div class="v ${missing ? "bad" : "ok"}">${missing}</div></div>
+    </div>
+    ${low ? `<div class="msg bad">Мало газа на ${low === 1 ? "одной заправке" : low + " заправках"} — пора заказывать газовоз.</div>` : ""}
+    ${cards}
+    <button type="button" class="btn btn-soft" data-act="add">+ Добавить заправку</button>
+    <button type="button" class="btn btn-soft" data-act="settings">Уведомления и настройки</button>
+    ${syncLine()}`;
+}
+function detailView(){
+  const st = S.stations.find(s => s.id === S.detailSid);
+  if (!st){ S.view = "home"; return ownerView(); }
+  const today = workDate(), rs = stReports(st.id);
+  const rows = [];
+  for (let i = 0; i < 7; i++){
+    const d = shiftDate(today, -i); let tot = 0, any = false;
+    const cells = SLOTS.map(s => {
+      const r = rs.find(x => x.date === d && x.slot === s.id);
+      if (r){ tot += r.liters; any = true; return `<td class="num">${fmt(r.liters)}</td>`; }
+      return slotState(st.id, d, s).st === "late" ? `<td class="miss">нет</td>` : `<td class="num">—</td>`;
+    }).join("");
+    rows.push(`<tr><td>${i === 0 ? "Сегодня" : esc(dayShort(d))}</td>${cells}<td class="num tot">${any ? fmt(tot) : "—"}</td></tr>`);
+  }
+  const dl = S.deliveries.filter(d => d.sid === st.id).sort((a,b) => b.at - a.at).slice(0, 8);
+  const c = S.confirm;
+  return `<button type="button" class="link back" data-act="home">← Все заправки</button>
+  <h1 style="font-size:28px">${esc(st.name)}</h1>
+  ${tankBlock(st)}
+  <div class="card"><div class="label">Продажи за 7 дней, литры</div>
+    <div class="tbl-wrap"><table><thead><tr><th>День</th>${SLOTS.map(s => `<th>${s.label}</th>`).join("")}<th>Итого</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>
+    <div class="hint">Показание счётчика сейчас: <span class="num">${fmt(st.lastMeter,2)}</span></div></div>
+  <div class="card"><div class="label">Привозы газа</div>
+    ${dl.length ? `<div class="list">${dl.map(d => `<div><span>${esc(dayShort(dkey(new Date(d.at))))}, ${timeStr(new Date(d.at))} · <b class="num">+${fmt(d.liters)} л</b></span>
+      <button type="button" class="mini danger" data-act="delDl" data-id="${esc(d.id)}">${c === "dl:"+d.id ? "Точно удалить?" : "Удалить"}</button></div>`).join("")}</div>`
+      : `<div class="hint">Привозов пока не было.</div>`}</div>
+  <form class="card" data-submit="fix" novalidate><div class="label">Исправить уровень газа</div>
+    <div class="field"><label for="fixLevel">Сколько газа в бочке на самом деле, л</label>
+      <p class="hint" style="margin:0">Например, после замера уровнемером. Дальше расчёт пойдёт от этой цифры.</p>
+      <input id="fixLevel" class="txt num" data-f="fixLevel" inputmode="decimal" autocomplete="off" value="${esc(S.form.fixLevel || "")}"></div>
+    <button type="submit" class="btn btn-soft" ${S.busy ? "disabled" : ""}>Сохранить уровень</button></form>
+  <form class="card" data-submit="settingsSt" novalidate><div class="label">Настройки заправки</div>
+    <div class="field"><label for="setName">Название</label><input id="setName" class="txt" data-f="setName" autocomplete="off" value="${esc(S.form.setName ?? st.name)}"></div>
+    <div class="field"><label for="setCap">Объём бочки, л</label><input id="setCap" class="txt num" data-f="setCap" inputmode="decimal" autocomplete="off" value="${esc(S.form.setCap ?? (st.capacity || ""))}"></div>
+    ${S.err ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}
+    <button type="submit" class="btn btn-soft" ${S.busy ? "disabled" : ""}>Сохранить настройки</button>
+    <button type="button" class="btn btn-danger" data-act="delSt">${c === "st" ? "Точно удалить? Нажмите ещё раз" : "Удалить заправку"}</button></form>`;
+}
+function addView(){
+  const f = (id, label, hint, num) => `<div class="field"><label for="${id}">${label}</label>${hint ? `<p class="hint" style="margin:0">${hint}</p>` : ""}
+    <input id="${id}" class="txt${num ? " num" : ""}" data-f="${id}" ${num ? 'inputmode="decimal"' : ""} autocomplete="off" value="${esc(S.form[id] || "")}"></div>`;
+  return `<button type="button" class="link back" data-act="home">← Назад</button>
+  <h1 style="font-size:28px">Новая заправка</h1>
+  <form class="card" data-submit="addSt" novalidate>
+    ${f("stName","Название","Как операторы её называют, например «АГЗС на Южной».")}
+    ${f("stCap","Объём бочки, л","По паспорту ёмкости.",true)}
+    ${f("stLevel","Сколько газа в бочке сейчас, л","",true)}
+    ${f("stMeter","Показание счётчика колонки сейчас","С этой цифры начнётся подсчёт продаж.",true)}
+    ${S.err ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}
+    <button type="submit" class="btn btn-main" ${S.busy ? "disabled" : ""}>${S.busy ? "Сохраняю…" : "Добавить заправку"}</button>
+  </form>`;
+}
+function settingsView(){
+  const s = S.settings || {};
+  const link = opLink();
+  return `<button type="button" class="link back" data-act="home">← Назад</button>
+  <h1 style="font-size:28px">Уведомления и настройки</h1>
+  ${S.note ? `<div class="msg ok">${esc(S.note)}</div>` : ""}
+  ${S.err ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}
+  <div class="card"><div class="label">Ссылка для операторов</div>
+    <p class="hint" style="margin:0">Отправьте её на рабочий телефон, откройте в Chrome, выберите заправку и включите уведомления.</p>
+    <input id="opLink" class="txt" readonly value="${esc(link)}">
+    <button type="button" class="btn btn-soft" data-act="copyUrl">Скопировать ссылку</button>
+  </div>
+  <div class="card"><div class="label">Уведомления</div>
+    ${pushCard(true)}
+    ${S.push === "on" ? `<button type="button" class="btn btn-soft" data-act="testPush" ${S.busy ? "disabled" : ""}>Прислать проверочное уведомление</button>` : ""}
+    <div class="status">
+      <div>Телефонов владельца: <b>${fmt(s.ownerPhones || 0)}</b></div>
+      ${(s.phones || []).map(p => `<div>${esc(p.name)}: <b>${p.count ? fmt(p.count) + " тел." : "нет телефонов"}</b></div>`).join("")}
+    </div>
+    <p class="hint" style="margin:0">Операторы получают напоминание в 8:00, 18:00 и 22:00 и ещё одно через 30 минут, если сводки нет. Вам через 45 минут приходит сводка по всем заправкам.</p>
+  </div>
+  <div class="card"><div class="label">Почта</div>
+    <label class="toggle"><input type="checkbox" id="emailOn" data-act="email" ${s.emailOn ? "checked" : ""}><span>Дублировать сводки и тревоги на ${esc(s.email || "почту")}</span></label>
+  </div>
+  <div class="card"><div class="label">Данные</div>
+    <p class="hint" style="margin:0">Все сводки и привозы хранятся в вашей Google Таблице.</p>
+    ${s.sheetUrl ? `<a class="btn btn-soft" href="${esc(s.sheetUrl)}" target="_blank" rel="noopener" style="text-decoration:none">Открыть таблицу</a>` : ""}
+  </div>
+  <button type="button" class="btn btn-danger" data-act="logout">Выйти из режима владельца</button>`;
+}
+function opLink(){
+  const id = idFromInput(S.api) || "";
+  return location.origin + location.pathname + "?s=" + id;
+}
+
+function render(){
+  const app = document.getElementById("app");
+  const a = document.activeElement, fid = a && a.id, sel = a && typeof a.selectionStart === "number" ? [a.selectionStart, a.selectionEnd] : null;
+  if (!S.api && !S.demo){ app.innerHTML = header() + setupView(); return; }
+  if (!S.ready){
+    app.innerHTML = header() + (S.loadErr
+      ? `<div class="card empty"><h2>Не удалось загрузить</h2><p class="hint" style="margin:0">${esc(S.loadErr)}</p><button type="button" class="btn btn-main" data-act="reload">Попробовать ещё раз</button></div>`
+      : `<div class="loading">Загрузка данных…</div>`);
+    return;
+  }
+  app.innerHTML = header() + (S.mode === "owner" && S.owner ? ownerView() : operatorView());
+  if (fid){ const el = document.getElementById(fid); if (el && el !== document.body){ el.focus({ preventScroll: true }); if (sel && el.setSelectionRange) try { el.setSelectionRange(sel[0], sel[1]); } catch(e){} } }
+}
+
+// ---------- actions ----------
+const top0 = () => window.scrollTo(0,0);
+const A = {
+  mode(d){ S.mode = d.m; S.view = "home"; S.flash = null; S.err = null; S.confirm = null; },
+  pick(d){ S.sid = d.sid; lsSet("agzs.sid", d.sid); S.view = "home"; S.opSlot = null; S.form = {}; quietSync(); },
+  unpick(){ S.sid = null; lsSet("agzs.sid", null); },
+  slot(d){ S.opSlot = d.slot; S.form.meter = ""; S.confirm = null; S.err = null; },
+  home(){ S.view = "home"; S.err = null; S.note = null; S.confirm = null; S.form = {}; top0(); },
+  reload(){ S.loadErr = null; S.push = pushStatus(); if (S.push === "on") quietSync(); refresh(); return Promise.resolve(); },
+  openDelivery(){ S.view = "delivery"; S.form.dl = ""; S.err = null; },
+  done(){ S.flash = null; S.view = "home"; S.opSlot = null; top0(); },
+  login(){ S.view = "login"; S.form.pinIn = ""; S.err = null; top0(); },
+  detail(d){ S.view = "detail"; S.detailSid = d.sid; S.form = {}; S.err = null; S.confirm = null; top0(); },
+  add(){ S.view = "add"; S.form = {}; S.err = null; top0(); },
+  settings(){ S.view = "settings"; S.form = {}; S.err = null; S.note = null; top0();
+    return run(async () => { S.settings = await call("getSettings", S.pin); }); },
+  logout(){ S.pin = null; lsSet("agzs.pin", null); S.owner = false; S.settings = null; S.mode = "operator"; S.view = "home"; top0(); quietSync(); },
+  enablePush(){ return run(async () => { try { await syncPush(true); } catch(e){ S.errAt = "push"; throw e; } if (S.push === "denied") S.err = null; }); },
+  testPush(){ return run(async () => { S.note = await call("testPush", S.pin, S.dev); }); },
+  install(){ const e = S.installEvt; if (!e) return; S.installEvt = null; e.prompt(); return Promise.resolve(); },
+  copyUrl(){
+    const el = document.getElementById("opLink"); const url = opLink();
+    const ok = () => { S.note = "Ссылка скопирована."; render(); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok, () => { if (el){ el.focus(); el.select(); } });
+    else if (el){ el.focus(); el.select(); }
+    return Promise.resolve();
+  },
+  email(d, el){ const on = el.checked; return run(async () => { S.settings = await call("setEmail", S.pin, on); }); },
+  delSt(){
+    if (S.confirm !== "st"){ S.confirm = "st"; return; }
+    const id = S.detailSid; S.confirm = null;
+    return run(async () => { applyState(await call("deleteStation", S.pin, id)); S.view = "home"; });
+  },
+  delDl(d){
+    if (S.confirm !== "dl:" + d.id){ S.confirm = "dl:" + d.id; return; }
+    S.confirm = null; return run(async () => applyState(await call("deleteDelivery", S.pin, d.id)));
+  },
+};
+const SUBMIT = {
+  report(){
+    const st = S.stations.find(s => s.id === S.sid); if (!st) return;
+    const date = workDate(), slotId = S.opSlot || autoSlot(), key = `${date}_${slotId}`;
+    const v = parseNum(S.form.meter);
+    if (!Number.isFinite(v)){ S.err = "Введите цифры со счётчика колонки."; render(); return; }
+    const prev = prevMeterFor(st, key), next = nextMeterFor(st, key);
+    if (v < prev || (next != null && v > next)){ S.err = "Проверьте показание — оно не сходится с другими сводками."; render(); return; }
+    if (v - prev > BIG_LITERS && S.confirm !== "big"){ S.confirm = "big"; render(); return; }
+    S.confirm = null;
+    return run(async () => {
+      applyState(await call("submitReport", { sid: st.id, date, slot: slotId, meter: v }));
+      const r = S.reports.find(x => x.sid === st.id && x.key === key);
+      S.flash = { type: "report", liters: r ? r.liters : v - prev, label: slotOf(slotId).label }; S.form.meter = ""; top0();
+    });
+  },
+  delivery(){
+    const st = S.stations.find(s => s.id === S.sid); if (!st) return;
+    const v = parseNum(S.form.dl);
+    if (!Number.isFinite(v) || v <= 0){ S.err = "Введите, сколько литров залили."; render(); return; }
+    return run(async () => {
+      applyState(await call("addDelivery", { sid: st.id, liters: v }));
+      S.flash = { type: "delivery", liters: v }; S.view = "home"; S.form.dl = ""; top0();
+    });
+  },
+  login(){
+    const pin = (S.form.pinIn || "").trim();
+    if (!pin){ S.err = "Введите PIN."; render(); return; }
+    return run(async () => {
+      S.settings = await call("ownerLogin", pin);
+      S.pin = pin; lsSet("agzs.pin", pin); S.owner = true; S.mode = "owner"; S.view = "home"; S.form = {}; top0();
+      quietSync();
+    });
+  },
+  addSt(){
+    const name = (S.form.stName || "").trim(), cap = parseNum(S.form.stCap), lvl = parseNum(S.form.stLevel), m = parseNum(S.form.stMeter);
+    if (!name){ S.err = "Впишите название заправки."; render(); return; }
+    if (!Number.isFinite(lvl) || lvl < 0){ S.err = "Впишите, сколько газа в бочке сейчас."; render(); return; }
+    if (!Number.isFinite(m) || m < 0){ S.err = "Впишите показание счётчика колонки."; render(); return; }
+    if (Number.isFinite(cap) && lvl > cap){ S.err = "Газа в бочке больше, чем её объём. Проверьте цифры."; render(); return; }
+    return run(async () => {
+      applyState(await call("addStation", S.pin, { name, capacity: Number.isFinite(cap) ? cap : null, level: lvl, meter: m }));
+      S.view = "home"; S.form = {};
+    });
+  },
+  fix(){
+    const v = parseNum(S.form.fixLevel);
+    if (!Number.isFinite(v) || v < 0){ S.err = "Впишите уровень газа в литрах."; render(); return; }
+    return run(async () => { applyState(await call("fixTank", S.pin, { id: S.detailSid, level: v })); S.form.fixLevel = ""; });
+  },
+  settingsSt(){
+    const st = S.stations.find(s => s.id === S.detailSid); if (!st) return;
+    const name = (S.form.setName ?? st.name).trim(), cap = parseNum(S.form.setCap ?? st.capacity);
+    if (!name){ S.err = "Название не может быть пустым."; render(); return; }
+    return run(async () => { applyState(await call("updateStation", S.pin, { id: st.id, name, capacity: Number.isFinite(cap) ? cap : null })); S.form.setName = undefined; S.form.setCap = undefined; });
+  },
+  setApi(){
+    const id = idFromInput(S.form.apiIn);
+    if (!id){ S.err = "Это не похоже на ссылку Apps Script. Скопируйте «URL веб-приложения» целиком."; render(); return; }
+    return run(async () => {
+      S.api = apiFromId(id);
+      try { applyState(await call("getState")); }
+      catch(e){ S.api = null; throw e; }
+      lsSet("agzs.api", id); S.form = {};
+      await registerSW(); S.push = pushStatus();
+    });
+  },
+};
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"); if (!b || b.tagName === "INPUT") return;
+  const fn = A[b.dataset.act]; if (!fn) return;
+  const r = fn(b.dataset, b); if (!(r instanceof Promise)) render();
+});
+document.addEventListener("change", e => {
+  const el = e.target; if (el.tagName !== "INPUT" || el.type !== "checkbox" || !el.dataset.act) return;
+  const fn = A[el.dataset.act]; if (fn) fn(el.dataset, el);
+});
+document.addEventListener("submit", e => {
+  const f = e.target.closest("form[data-submit]"); if (!f) return;
+  e.preventDefault(); const fn = SUBMIT[f.dataset.submit]; if (fn) fn();
+});
+document.addEventListener("input", e => {
+  const k = e.target.dataset && e.target.dataset.f; if (!k) return;
+  S.form[k] = e.target.value;
+  if (k === "meter"){ if (S.confirm === "big"){ S.confirm = null; render(); } else updateCalc(); }
+  if (S.err){ S.err = null; const m = document.querySelector('.msg.bad[role="alert"]'); if (m && !m.closest("#calc")) m.remove(); }
+});
+setInterval(() => { if (document.visibilityState === "visible" && !S.busy) refresh(); }, 60000);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && Date.now() - S.lastSync > 20000) refresh(); });
+
+// ---------- пример без сервера (для проверки дизайна) ----------
+const Demo = {
+  st: [], rep: [], del: [],
+  seed(){
+    let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const now = new Date(), today = workDate(now), start = parseDate(shiftDate(today, -8)).getTime();
+    this.st = [
+      { id: "d1", name: "АГЗС на Южной (пример)", capacity: 10000, startMeter: 248310, baseMeter: 248310, baseLevel: 8200, baseAt: start, createdAt: start },
+      { id: "d2", name: "АГЗС у трассы (пример)", capacity: 20000, startMeter: 517902, baseMeter: 517902, baseLevel: 15100, baseAt: start, createdAt: start + 1 },
+    ];
+    const cur = autoSlot(now);
+    for (const st of this.st){
+      let m = st.startMeter;
+      for (let i = 7; i >= 0; i--){
+        const date = shiftDate(today, -i);
+        for (const sl of SLOTS){
+          if (i === 0 && sl.id >= cur) continue;
+          if (i === 0 && st.id === "d2" && sl.id === "08") continue;
+          m = +(m + Math.round((sl.id === "18" ? 500 : 250) + rnd() * 400)).toFixed(2);
+          this.rep.push({ key: `${date}_${sl.id}`, sid: st.id, date, slot: sl.id, meter: m, at: parseDate(date).getTime() + sl.due*3600000 });
+        }
+      }
+    }
+    this.del.push({ id: "v1", sid: "d1", liters: 5000, at: Date.now() - 4*86400000 });
+  },
+  state(){
+    const st = this.st.map(s => ({ ...s })), rep = this.rep.map(r => ({ ...r }));
+    for (const s of st){
+      const rs = rep.filter(r => r.sid === s.id).sort((a,b) => a.key < b.key ? -1 : 1);
+      let prev = s.startMeter; rs.forEach(r => { r.liters = r.meter - prev; prev = r.meter; });
+      s.lastMeter = rs.length ? rs[rs.length-1].meter : s.startMeter; s.lastKey = rs.length ? rs[rs.length-1].key : "";
+      s.tank = s.baseLevel + this.del.filter(d => d.sid === s.id && d.at > s.baseAt).reduce((a,d) => a + d.liters, 0) - Math.max(0, s.lastMeter - s.baseMeter);
+    }
+    return { stations: st, reports: rep, deliveries: this.del.slice() };
+  },
+  async call(fn, a){
+    await new Promise(r => setTimeout(r, 250));
+    const settings = { email: "example@gmail.com", emailOn: true, ownerPhones: 1, phones: this.st.map((s,i) => ({ name: s.name, count: i ? 0 : 2 })), sheetUrl: "", defaultPin: true };
+    switch (fn){
+      case "getState": return this.state();
+      case "submitReport": { const p = a[0]; const key = `${p.date}_${p.slot}`; this.rep = this.rep.filter(r => !(r.sid === p.sid && r.key === key)); this.rep.push({ ...p, key, at: Date.now() }); return this.state(); }
+      case "addDelivery": this.del.push({ id: "v" + Date.now(), sid: a[0].sid, liters: a[0].liters, at: Date.now() }); return this.state();
+      case "ownerLogin": case "getSettings": case "setEmail": case "setChat": return settings;
+      case "addStation": { const p = a[1], t = Date.now(); this.st.push({ id: "d" + t, name: p.name, capacity: p.capacity, startMeter: p.meter, baseMeter: p.meter, baseLevel: p.level, baseAt: t, createdAt: t }); return this.state(); }
+      case "updateStation": { const s = this.st.find(x => x.id === a[1].id); Object.assign(s, { name: a[1].name, capacity: a[1].capacity }); return this.state(); }
+      case "fixTank": { const s = this.state().stations.find(x => x.id === a[1].id), o = this.st.find(x => x.id === a[1].id); Object.assign(o, { baseLevel: a[1].level, baseAt: Date.now(), baseMeter: s.lastMeter }); return this.state(); }
+      case "deleteStation": this.st = this.st.filter(x => x.id !== a[1]); return this.state();
+      case "deleteDelivery": this.del = this.del.filter(x => x.id !== a[1]); return this.state();
+      case "subscribe": return { ok: true };
+      case "testPush": return "В примере уведомления не отправляются.";
+      default: throw new Error("В примере это недоступно.");
+    }
+  },
+};
+
+(async () => {
+  const q = new URLSearchParams(location.search);
+  if (q.has("demo")){ S.demo = true; Demo.seed(); S.pin = "demo"; S.api = "demo"; }
+  else {
+    const fromLink = idFromInput(q.get("s"));
+    if (fromLink) lsSet("agzs.api", fromLink);
+    if (q.has("s")) history.replaceState(null, "", location.pathname);
+    const id = lsGet("agzs.api"); S.api = id ? apiFromId(id) : null;
+  }
+  S.dev = lsGet("agzs.dev");
+  if (!S.dev){ S.dev = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)).replace(/[^\w-]/g, ""); lsSet("agzs.dev", S.dev); }
+  window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); S.installEvt = e; render(); });
+  window.addEventListener("appinstalled", () => { S.installEvt = null; render(); });
+  if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", e => { if (e.data === "refresh") refresh(); });
+  render();
+  if (!S.api) return;
+  await registerSW();
+  S.push = pushStatus();
+  if (S.pin){
+    try { S.settings = await call("ownerLogin", S.pin); S.owner = true; S.mode = "owner"; }
+    catch(e){ if (/PIN/.test(errText(e))){ S.pin = null; lsSet("agzs.pin", null); } }
+  }
+  await refresh();
+  if (S.push === "on") quietSync();
+})();
+})();
+</script>
+</body>
+</html>
