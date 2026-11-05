@@ -244,6 +244,21 @@ const SLOTS = [
   { id: "18", label: "Вечер", time: "18:00", due: 18 },
   { id: "22", label: "Ночь",  time: "22:00", due: 22 },
 ];
+const APP_BUILD = "05.11.2026 14:33";
+/** Если на сайте лежит новая версия, а браузер показал сохранённую старую — перезагрузиться на свежую. */
+async function checkUpdate(){
+  try {
+    const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) return;
+    const v = (await r.json()).v;
+    if (!v || v === APP_BUILD) return;
+    let tried = null; try { tried = sessionStorage.getItem("agzs.upd"); } catch(e){}
+    if (tried === v) return;                       // уже пробовали — не зацикливаемся
+    try { sessionStorage.setItem("agzs.upd", v); } catch(e){}
+    if (S.busy || Object.values(S.form || {}).some(x => x)) return;   // не мешаем, если человек что-то вводит
+    location.replace(location.pathname + "?v=" + encodeURIComponent(v));
+  } catch(e){}
+}
 const MAX_FILL = 85, LATE_MIN = 45, BIG_LITERS = 8000, LOW_PCT = 20;
 
 const S = {
@@ -1259,6 +1274,7 @@ document.addEventListener("input", e => {
   if (S.err){ S.err = null; const m = document.querySelector('.msg.bad[role="alert"]'); if (m && !m.closest("#calc")) m.remove(); }
 });
 setInterval(() => { if (document.visibilityState === "visible" && !S.busy) refresh(); }, 60000);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkUpdate(); });
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && Date.now() - S.lastSync > 20000) refresh(); });
 
 // ---------- пример без сервера (для проверки дизайна) ----------
@@ -1331,7 +1347,7 @@ const Demo = {
   else {
     const fromLink = idFromInput(q.get("s"));
     if (fromLink) lsSet("agzs.api", fromLink);
-    if (q.has("s")) history.replaceState(null, "", location.pathname);
+    if (q.has("s") || q.has("v")) history.replaceState(null, "", location.pathname);
     const saved = lsGet("agzs.api");
     const id = saved || DEFAULT_SERVER; S.api = id ? apiFromId(id) : null;
     S.usingDefault = !saved && !!DEFAULT_SERVER;
@@ -1342,6 +1358,7 @@ const Demo = {
   window.addEventListener("appinstalled", () => { S.installEvt = null; render(); });
   if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", e => { if (e.data === "refresh") refresh(); });
   render();
+  if (!S.demo) checkUpdate();
   if (!S.api) return;
   if (S.pin){
     try { const res = await call("ownerLogin", S.pin); S.settings = res; if (res.tok) setTok(res.tok); S.owner = true; S.mode = "owner"; }

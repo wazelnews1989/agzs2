@@ -49,3 +49,9 @@ self.addEventListener("notificationclick", e => {
     return self.clients.openWindow(url);
   })());
 });
+
+// Страницу приложения всегда сверяем с сайтом, чтобы обновления приходили сразу, а не через 10 минут.
+self.addEventListener("fetch", e => {
+  if (e.request.mode !== "navigate") return;
+  e.respondWith(fetch(e.request, { cache: "no-cache" }).catch(() => fetch(e.request)));
+});
