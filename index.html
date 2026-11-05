@@ -39,7 +39,7 @@ svg.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:
 /* ---------- фото сверху ---------- */
 .hero-bg{position:absolute;z-index:0;top:calc(-1 * max(12px,env(safe-area-inset-top,0px)));left:calc(-1 * var(--gut));right:calc(-1 * var(--gut));height:360px;
   background:url(hero.jpg) center 40%/cover no-repeat;pointer-events:none}
-.hero-bg::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,12,15,.78) 0%,rgba(10,12,15,.25) 30%,rgba(10,12,15,.35) 62%,var(--bg) 100%)}
+.hero-bg::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,12,15,.8) 0%,rgba(10,12,15,.25) 28%,rgba(10,12,15,.55) 58%,rgba(10,12,15,.85) 78%,var(--bg) 100%)}
 .hero-bg.short{height:250px}
 #app > *{position:relative;z-index:1}
 #app > .hero-bg{position:absolute;z-index:0}
@@ -93,12 +93,12 @@ svg.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:
 
 /* остатки */
 .tanks{display:flex;flex-direction:column}
-.tank-row{display:grid;grid-template-columns:48px 1fr auto;align-items:center;gap:12px;padding:12px 0;border:0;border-top:1px solid var(--line);background:none;text-align:left;cursor:pointer;width:100%}
+.tank-row{display:grid;grid-template-columns:84px 1fr auto;align-items:center;gap:12px;padding:12px 0;border:0;border-top:1px solid var(--line);background:none;text-align:left;cursor:pointer;width:100%}
 .tank-row:first-child{border-top:0;padding-top:4px}
 .tank-ico{width:48px;height:48px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;font-size:26px;color:#C9D0D8}
 .tank-mid{display:flex;flex-direction:column;gap:8px;min-width:0}
 .tank-top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
-.tank-top b{font-size:20px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tank-top b{font-size:20px;min-width:0;overflow-wrap:anywhere;line-height:1.2}
 .tank-top .pct{font-size:18px;font-weight:700;white-space:nowrap}
 .tank-l{font-size:15px;color:var(--muted)}
 .chev{font-size:22px;color:var(--muted)}
@@ -231,6 +231,11 @@ td.num{font-variant-numeric:tabular-nums} td.miss{color:var(--bad)} td.tot{font-
 .nav button svg.i{font-size:27px}
 .nav button[aria-current="page"]{color:var(--accent-2)}
 
+/* логотип и бочки */
+.brand .logo{height:48px;width:auto;display:block;filter:drop-shadow(0 2px 10px rgba(0,0,0,.6))}
+.tank-img{width:84px;height:auto;aspect-ratio:300/227;object-fit:contain;display:block;filter:drop-shadow(0 4px 8px rgba(0,0,0,.45))}
+.tank-mini{width:40px;height:auto;object-fit:contain;flex:none}
+
 </style>
 </head>
 <body>
@@ -244,7 +249,7 @@ const SLOTS = [
   { id: "18", label: "Вечер", time: "18:00", due: 18 },
   { id: "22", label: "Ночь",  time: "22:00", due: 22 },
 ];
-const APP_BUILD = "05.11.2026 14:33";
+const APP_BUILD = "05.11.2026 14:49";
 /** Если на сайте лежит новая версия, а браузер показал сохранённую старую — перезагрузиться на свежую. */
 async function checkUpdate(){
   try {
@@ -584,7 +589,7 @@ function header(){
   const ownerBtns = S.owner && S.mode === "owner" ? `<div class="head-btns">
       <button type="button" class="icon-btn" data-act="nav" data-v="settings" aria-label="Уведомления">${IC.bell}${S.push !== "on" ? '<span class="dot"></span>' : ""}</button>
       <button type="button" class="icon-btn" data-act="nav" data-v="settings" aria-label="Настройки">${IC.sliders}</button></div>` : "";
-  return `<div class="top"><div class="brand">${IC.flame}<div><b>Сводки АГЗС</b><span>${S.owner ? "Сеть газовых заправок" : "Сменные сводки"}</span></div></div>${ownerBtns}</div>${seg}${banner}`;
+  return `<div class="top"><div class="brand"><img class="logo" src="logo.png" alt="АГЗС · отчёты" width="188" height="48"></div>${ownerBtns}</div>${seg}${banner}`;
 }
 function heroTitle(sub, title, short){
   return `<div class="hero-title${short ? " short" : ""}"><span class="d">${esc(sub)}</span><h1>${esc(title)}</h1></div>`;
@@ -848,7 +853,7 @@ function ownerView(){
     const m = findRep(st.id, date, "08");
     if (m && m.cash != null){ cash += m.cash; anyCash = true; }
     tankRows.push(`<button type="button" class="tank-row" data-act="detail" data-sid="${esc(st.id)}">
-      <span class="tank-ico">${IC.tank}</span>
+      <img class="tank-img" src="tank.png" alt="" width="84" height="64">
       <span class="tank-mid"><span class="tank-top"><b>${esc(st.name)}</b><span class="pct num">${pct != null ? fmt(pct) + " %" : ""}</span></span>
         <span class="bar"><i style="width:${(pct ?? 0).toFixed(1)}%;background:${levelColor(pct ?? 0)}"></i></span>
         <span class="tank-l num">≈ ${fmt(Math.max(0, st.tank))} л${st.capacity ? ` из ${fmt(st.capacity)}` : ""}</span></span>
@@ -874,7 +879,7 @@ function ownerView(){
     </div>
     ${revCard}
     ${low ? `<div class="msg bad">Мало газа на ${low === 1 ? "одной заправке" : low + " заправках"} — пора заказывать газовоз.</div>` : ""}
-    <div class="card"><div class="card-h">${IC.tank}Остатки газа в резервуарах</div><div class="tanks">${tankRows.join("")}</div></div>
+    <div class="card"><div class="card-h"><img class="tank-mini" src="tank.png" alt="" width="40" height="30">Остатки газа в резервуарах</div><div class="tanks">${tankRows.join("")}</div></div>
     <div class="card"><div class="card-h">${IC.doc}Сводки сегодня</div><div class="st-rows">${statusRows.join("")}</div></div>
     ${syncLine()}`;
 }
