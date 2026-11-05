@@ -275,6 +275,8 @@ async function run(fn){
 
 // ---------- уведомления ----------
 const API_BASE = "https://script.google.com/macros/s/";
+// Адрес вашего сервера Apps Script: с ним приложение не спрашивает ссылку при входе.
+const DEFAULT_SERVER = "AKfycbyYho4BrDQVb6qcv0gzuYXuWrdWey_vhhjOkdeeiVCKD4jMGXhvPiFDKrtJUrnXgbQD";
 function apiFromId(id){ return API_BASE + id + "/exec"; }
 function idFromInput(v){
   v = String(v || "").trim();
@@ -822,7 +824,9 @@ const Demo = {
     const fromLink = idFromInput(q.get("s"));
     if (fromLink) lsSet("agzs.api", fromLink);
     if (q.has("s")) history.replaceState(null, "", location.pathname);
-    const id = lsGet("agzs.api"); S.api = id ? apiFromId(id) : null;
+    const saved = lsGet("agzs.api");
+    const id = saved || DEFAULT_SERVER; S.api = id ? apiFromId(id) : null;
+    S.usingDefault = !saved && !!DEFAULT_SERVER;
   }
   S.dev = lsGet("agzs.dev");
   if (!S.dev){ S.dev = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)).replace(/[^\w-]/g, ""); lsSet("agzs.dev", S.dev); }
@@ -838,6 +842,7 @@ const Demo = {
     catch(e){ if (/PIN/.test(errText(e))){ S.pin = null; lsSet("agzs.pin", null); } }
   }
   await refresh();
+  if (!S.ready && S.usingDefault){ S.api = null; S.loadErr = null; render(); return; }   // встроенный адрес не ответил — спросим вручную
   if (S.push === "on") quietSync();
 })();
 })();
