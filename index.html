@@ -157,7 +157,7 @@ td.num{font-family:var(--f-num)} td.miss{color:var(--bad);font-family:var(--f-bo
 .chip{font-size:13px;padding:7px 3px}
 .chip b{font-size:15px}
 /* шкала бочки: от тёмно-красного (пусто) до ярко-зелёного (100 %) */
-.gauge-fill{background-color:#7A0A0A;background-image:linear-gradient(90deg,#7A0A0A 0%,#C62828 18%,#EF6C00 38%,#F9C80E 58%,#7CD13A 80%,#00E04B 100%);background-repeat:no-repeat;background-position:0 0}
+.gauge-fill{background-color:#7A0A0A;background-image:linear-gradient(90deg,#7A0A0A 0%,#D32F2F 8%,#F57C00 17%,#FBC02D 28%,#C6D930 42%,#7ED348 58%,#2FD95A 78%,#00E64D 100%);background-repeat:no-repeat;background-position:0 0}
 body{margin:0;padding-top:max(12px,env(safe-area-inset-top,0px))}
 ol.steps{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:8px;font-size:18px}
 ol.steps code{font-family:var(--f-num);font-size:16px;background:var(--sunk);padding:1px 6px;border-radius:6px}
@@ -190,6 +190,7 @@ const S = {
   ready: false, loadErr: null, demo: false, lastSync: 0,
   stations: [], reports: [], deliveries: [],
   pin: lsGet("agzs.pin"), owner: false, settings: null, note: null,
+  tok: lsGet("agzs.tok"), devices: [], revoked: false, opl: { step: "code", code: "", stations: [] },
   api: null, dev: null, vapid: null, push: "unsupported", installEvt: null,
   mode: "operator", view: "home", sid: lsGet("agzs.sid"), opSlot: null,
   detailSid: null, flash: null, form: {}, confirm: null, err: null, busy: false,
@@ -313,20 +314,32 @@ function slotState(sid, date, slot){
 // ---------- сервер ----------
 const ARGS = {
   getState: () => ({}), submitReport: p => ({ p }), addDelivery: p => ({ p }),
-  ownerLogin: pin => ({ pin }), getSettings: pin => ({ pin }), setEmail: (pin, on) => ({ pin, on }),
+  ownerLogin: pin => ({ pin, ua: navigator.userAgent }), getSettings: pin => ({ pin }), setEmail: (pin, on) => ({ pin, on }),
   addStation: (pin, p) => ({ pin, p }), updateStation: (pin, p) => ({ pin, p }), fixTank: (pin, p) => ({ pin, p }),
   deleteStation: (pin, id) => ({ pin, id }), deleteDelivery: (pin, id) => ({ pin, id }),
   subscribe: o => o, testPush: (pin, dev) => ({ pin, dev }),
+  opStations: code => ({ code }), opRegister: o => o,
+  setOpPin: (pin, code) => ({ pin, code }), revokeDevice: (pin, target) => ({ pin, target }), restoreDevice: (pin, target) => ({ pin, target }),
 };
+const OWNER_AUTO_PIN = ["getState", "submitReport", "addDelivery"];
+function setTok(t){ S.tok = t || null; lsSet("agzs.tok", S.tok); }
 async function call(fn, ...args){
   if (S.demo) return Demo.call(fn, args);
-  const body = JSON.stringify({ a: fn, ...ARGS[fn](...args) });
+  const extra = OWNER_AUTO_PIN.includes(fn) && S.owner && S.pin ? { pin: S.pin } : {};
+  const body = JSON.stringify({ a: fn, dev: S.dev, tok: S.tok, ...extra, ...ARGS[fn](...args) });
   let r;
   try { r = await fetch(S.api, { method: "POST", body, redirect: "follow" }); }
   catch(e){ throw new Error("Нет связи. Проверьте интернет и нажмите ещё раз."); }
   let j = null; try { j = await r.json(); } catch(e){}
   if (!j) throw new Error("Сервер не ответил. Проверьте адрес сервера или попробуйте позже.");
-  if (!j.ok) throw new Error(j.error || "Ошибка сервера.");
+  if (!j.ok){
+    if (j.error === "NEED_LOGIN" || j.error === "REVOKED"){
+      setTok(null); S.ready = false;
+      if (j.error === "REVOKED") S.revoked = true;
+      const e = new Error(j.error === "REVOKED" ? "Владелец отключил этот телефон от приложения." : "Нужно войти заново."); e.code = j.error; throw e;
+    }
+    throw new Error(j.error || "Ошибка сервера.");
+  }
   return j.data;
 }
 function errText(e){
@@ -339,11 +352,14 @@ function applyState(st){
   S.stations = (st.stations || []).sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
   S.reports = st.reports || []; S.deliveries = st.deliveries || [];
   if (st.vapid) S.vapid = st.vapid;
+  S.devices = st.devices || [];
+  if (st.mySid && !S.owner){ S.sid = st.mySid; lsSet("agzs.sid", S.sid); }
   S.ready = true; S.loadErr = null; S.lastSync = Date.now();
 }
 async function refresh(){
+  if (!S.owner && !S.tok){ render(); return; }
   try { applyState(await call("getState")); }
-  catch(e){ if (!S.ready) S.loadErr = errText(e); }
+  catch(e){ if (!e.code && !S.ready) S.loadErr = errText(e); }
   render();
 }
 async function run(fn){
@@ -370,7 +386,8 @@ let swReg = null;
 async function registerSW(){
   if (!("serviceWorker" in navigator) || S.demo) return;
   try {
-    const reg = await navigator.serviceWorker.register("sw.js?api=" + encodeURIComponent(S.api) + "&dev=" + encodeURIComponent(S.dev), { scope: "./" });
+    if (!S.tok) return;
+    const reg = await navigator.serviceWorker.register("sw.js?api=" + encodeURIComponent(S.api) + "&dev=" + encodeURIComponent(S.dev) + "&tok=" + encodeURIComponent(S.tok), { scope: "./" });
     // нужен активный помощник, чтобы подписка сработала сразу по нажатию
     swReg = await Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(() => r(reg), 8000))]);
   } catch(e){ swReg = null; }
@@ -403,7 +420,7 @@ function syncPush(ask){
     if (Notification.permission !== "granted"){ S.push = Notification.permission; return; }
     if (sub && !sameKey(sub.options && sub.options.applicationServerKey, S.vapid)){ await sub.unsubscribe(); sub = null; }
     if (!sub) sub = await swReg.pushManager.subscribe(opts);
-    await call("subscribe", { dev: S.dev, sub: sub.toJSON(), sid: S.sid || "", owner: S.owner, pin: S.owner ? S.pin : "" });
+    await call("subscribe", { sub: sub.toJSON() });
     S.push = "on";
   })();
 }
@@ -474,13 +491,12 @@ function footer(){
 function operatorView(){
   if (S.view === "login") return loginView();
   if (!S.stations.length){
-    return `<div class="card empty"><h2>Заправок пока нет</h2><p class="hint" style="margin:0">Владелец ещё не добавил заправки в приложение.</p>
+    return `<div class="card empty"><h2>${S.owner ? "Заправок пока нет" : "Заправка не найдена"}</h2><p class="hint" style="margin:0">${S.owner ? "Добавьте заправку в режиме владельца." : "Похоже, владелец удалил вашу заправку. Позвоните владельцу."}</p>
       <button type="button" class="btn btn-soft" data-act="reload">Обновить</button></div>${footer()}`;
   }
-  const st = S.stations.find(s => s.id === S.sid);
+  const st = S.owner ? S.stations.find(s => s.id === S.sid) : S.stations[0];
   if (!st){
-    return `<h1 style="font-size:28px">Выберите вашу заправку</h1>
-      <p class="hint" style="margin:0">Телефон запомнит выбор, спрашивать больше не будет.</p>
+    return `<h1 style="font-size:28px">Какую заправку открыть?</h1>
       <div class="picker">${S.stations.map(s => `<button type="button" class="btn btn-soft" data-act="pick" data-sid="${esc(s.id)}">${esc(s.name)}</button>`).join("")}</div>${footer()}`;
   }
   if (S.flash) return flashView(st);
@@ -497,7 +513,7 @@ function operatorView(){
 
   return `
   <div class="today"><span class="d">${dayLong(now)} · ${timeStr(now)}</span>
-    <div class="row"><span class="t">${esc(st.name)}</span><button type="button" class="link" data-act="unpick">Другая заправка</button></div></div>
+    <div class="row"><span class="t">${esc(st.name)}</span>${S.owner ? `<button type="button" class="link" data-act="unpick">Другая заправка</button>` : ""}</div></div>
   ${S.push !== "on" ? pushCard(false) : ""}
   <div class="card">
     <div class="label">Какую сводку отправляете</div>
@@ -560,8 +576,56 @@ function flashView(st){
     <button type="button" class="btn btn-ok" data-act="done">Готово</button>
   </div>`;
 }
+function opLoginView(){
+  const o = S.opl;
+  if (o.step === "pick"){
+    return `<h1 style="font-size:28px">Ваша заправка</h1>
+    <div class="card">
+      <div class="field"><label for="who">Как вас зовут?</label>
+        <p class="hint" style="margin:0">Чтобы владелец видел, чей это телефон.</p>
+        <input id="who" class="txt" data-f="who" autocomplete="name" value="${esc(S.form.who || "")}"></div>
+    </div>
+    <p class="hint" style="margin:0">Нажмите на свою заправку. Поменять её потом сможет только владелец.</p>
+    ${S.err ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}
+    <div class="picker">${o.stations.map(s => `<button type="button" class="btn btn-soft" data-act="opPick" data-sid="${esc(s.id)}" ${S.busy ? "disabled" : ""}>${esc(s.name)}</button>`).join("")}</div>
+    <button type="button" class="link back" data-act="opBack">← Назад</button>`;
+  }
+  return `<h1 style="font-size:28px">Вход для оператора</h1>
+  <form class="card" data-submit="opCode" novalidate>
+    <div class="field"><label for="opCode">Код доступа</label>
+      <p class="hint" style="margin:0">Код даёт владелец.</p>
+      <input id="opCode" class="meter" type="password" data-f="opCode" inputmode="numeric" autocomplete="off" value="${esc(S.form.opCode || "")}"></div>
+    ${S.err ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}
+    <button type="submit" class="btn btn-main" ${S.busy ? "disabled" : ""}>${S.busy ? "Проверяю…" : "Войти"}</button>
+  </form>${footer()}`;
+}
+function revokedView(){
+  return `<div class="card empty"><h2>Доступ отключён</h2>
+    <p class="hint" style="margin:0">Владелец отключил этот телефон от приложения. Если это ошибка, позвоните владельцу.</p></div>${footer()}`;
+}
+function platformOf(ua){ return /iPhone|iPad/.test(ua) ? "iPhone" : /Android/.test(ua) ? "Android" : /Macintosh/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : "Телефон"; }
+function whenStr(ms){
+  if (!ms) return "—";
+  const d = new Date(ms), today = dkey(new Date()) === dkey(d);
+  return today ? "сегодня " + timeStr(d) : dayShort(dkey(d)) + " " + timeStr(d);
+}
+function devicesCard(st){
+  const list = S.devices.filter(d => !d.owner && d.sid === st.id).sort((a,b) => (b.active - a.active) || (b.seen - a.seen));
+  const c = S.confirm;
+  return `<div class="card"><div class="label">Телефоны операторов</div>
+    ${list.length ? `<div class="list">${list.map(d => `<div style="${d.active ? "" : "opacity:.6"}">
+      <span style="display:flex;flex-direction:column;gap:2px;min-width:0"><b>${esc(d.who || "Без имени")}</b>
+        <span class="hint" style="font-size:15px">${platformOf(d.ua)} · подключён ${esc(dayShort(dkey(new Date(d.at))))} · был в сети ${esc(whenStr(d.seen))}</span>
+        <span class="hint" style="font-size:15px">${d.active ? (d.push ? "Уведомления включены" : "Уведомления выключены") : "<b>Доступ отключён</b>"}</span></span>
+      ${d.active
+        ? `<button type="button" class="mini danger" data-act="revokeDev" data-id="${esc(d.dev)}" ${S.busy ? "disabled" : ""}>${c === "rv:" + d.dev ? "Точно отключить?" : "Отключить"}</button>`
+        : `<button type="button" class="mini" data-act="restoreDev" data-id="${esc(d.dev)}" ${S.busy ? "disabled" : ""}>Вернуть доступ</button>`}
+    </div>`).join("")}</div>`
+    : `<div class="hint">Пока ни один телефон не подключён. Оператор открывает приложение, вводит код ${esc((S.settings && S.settings.opPin) || "")} и выбирает эту заправку.</div>`}
+  </div>`;
+}
 function loginView(){
-  return `<button type="button" class="link back" data-act="home">← Назад</button>
+  return `<button type="button" class="link back" data-act="${S.tok || S.owner ? "home" : "opBack"}">← Назад</button>
   <h1 style="font-size:28px">Вход для владельца</h1>
   <form class="card" data-submit="login" novalidate>
     <div class="field"><label for="pinIn">PIN владельца</label>
@@ -638,6 +702,7 @@ function detailView(){
   return `<button type="button" class="link back" data-act="home">← Все заправки</button>
   <h1 style="font-size:28px">${esc(st.name)}</h1>
   ${tankBlock(st)}
+  ${devicesCard(st)}
   <div class="card"><div class="label">Продажи по сменам, литры</div>
     <div class="tbl-wrap"><table><thead><tr><th>Сутки с 8:00</th><th>8–14</th><th>14–18</th><th>18–22</th><th>22–8</th><th>Всего</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>
     <div class="hint">«…» — сутки ещё не закрыты утренней сводкой.</div></div>
@@ -681,6 +746,12 @@ function settingsView(){
   <h1 style="font-size:28px">Уведомления и настройки</h1>
   ${S.note ? `<div class="msg ok">${esc(S.note)}</div>` : ""}
   ${S.err ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}
+  <form class="card" data-submit="opPin" novalidate><div class="label">Код для операторов</div>
+    <div class="big num">${esc(s.opPin || "—")}</div>
+    <p class="hint" style="margin:0">Оператор вводит его один раз на своём телефоне. Если поменять код, уже подключённые телефоны продолжат работать.</p>
+    <div class="field"><label for="newOpPin">Новый код</label><input id="newOpPin" class="txt num" data-f="newOpPin" inputmode="numeric" autocomplete="off" value="${esc(S.form.newOpPin || "")}"></div>
+    <button type="submit" class="btn btn-soft" ${S.busy ? "disabled" : ""}>Сменить код</button>
+  </form>
   <div class="card"><div class="label">Ссылка для операторов</div>
     <p class="hint" style="margin:0">Отправьте её на рабочий телефон, откройте в Chrome, выберите заправку и включите уведомления.</p>
     <input id="opLink" class="txt" readonly value="${esc(link)}">
@@ -713,6 +784,11 @@ function render(){
   const app = document.getElementById("app");
   const a = document.activeElement, fid = a && a.id, sel = a && typeof a.selectionStart === "number" ? [a.selectionStart, a.selectionEnd] : null;
   if (!S.api && !S.demo){ app.innerHTML = header() + setupView(); return; }
+  if (!S.owner && !S.tok){
+    app.innerHTML = header() + (S.view === "login" ? loginView() : S.revoked ? revokedView() : opLoginView());
+    if (fid){ const el = document.getElementById(fid); if (el) el.focus({ preventScroll: true }); }
+    return;
+  }
   if (!S.ready){
     app.innerHTML = header() + (S.loadErr
       ? `<div class="card empty"><h2>Не удалось загрузить</h2><p class="hint" style="margin:0">${esc(S.loadErr)}</p><button type="button" class="btn btn-main" data-act="reload">Попробовать ещё раз</button></div>`
@@ -739,7 +815,23 @@ const A = {
   add(){ S.view = "add"; S.form = {}; S.err = null; top0(); },
   settings(){ S.view = "settings"; S.form = {}; S.err = null; S.note = null; top0();
     return run(async () => { S.settings = await call("getSettings", S.pin); }); },
-  logout(){ S.pin = null; lsSet("agzs.pin", null); S.owner = false; S.settings = null; S.mode = "operator"; S.view = "home"; top0(); quietSync(); },
+  logout(){ S.pin = null; lsSet("agzs.pin", null); setTok(null); S.owner = false; S.settings = null; S.ready = false; S.mode = "operator"; S.view = "home"; S.opl = { step: "code", code: "", stations: [] }; top0(); },
+  opBack(){ S.view = "home"; S.opl = { step: "code", code: "", stations: [] }; S.err = null; top0(); },
+  opPick(d){
+    const who = (S.form.who || "").trim();
+    if (!who){ S.err = "Напишите, как вас зовут."; return; }
+    return run(async () => {
+      const r = await call("opRegister", { code: S.opl.code, sid: d.sid, who, ua: navigator.userAgent });
+      setTok(r.tok); S.sid = r.sid; lsSet("agzs.sid", r.sid); S.revoked = false; S.form = {}; S.view = "home";
+      await registerSW(); S.push = pushStatus();
+      applyState(await call("getState"));
+    });
+  },
+  revokeDev(d){
+    if (S.confirm !== "rv:" + d.id){ S.confirm = "rv:" + d.id; return; }
+    S.confirm = null; return run(async () => applyState(await call("revokeDevice", S.pin, d.id)));
+  },
+  restoreDev(d){ return run(async () => applyState(await call("restoreDevice", S.pin, d.id))); },
   enablePush(){ return run(async () => { try { await syncPush(true); } catch(e){ S.errAt = "push"; throw e; } if (S.push === "denied") S.err = null; }); },
   testPush(){ return run(async () => { S.note = await call("testPush", S.pin, S.dev); }); },
   install(){ const e = S.installEvt; if (!e) return; S.installEvt = null; e.prompt(); return Promise.resolve(); },
@@ -794,10 +886,26 @@ const SUBMIT = {
     const pin = (S.form.pinIn || "").trim();
     if (!pin){ S.err = "Введите PIN."; render(); return; }
     return run(async () => {
-      S.settings = await call("ownerLogin", pin);
-      S.pin = pin; lsSet("agzs.pin", pin); S.owner = true; S.mode = "owner"; S.view = "home"; S.form = {}; top0();
+      const res = await call("ownerLogin", pin);
+      S.settings = res; if (res.tok) setTok(res.tok);
+      S.pin = pin; lsSet("agzs.pin", pin); S.owner = true; S.revoked = false; S.mode = "owner"; S.view = "home"; S.form = {}; top0();
+      await registerSW(); S.push = pushStatus();
+      applyState(await call("getState"));
       quietSync();
     });
+  },
+  opCode(){
+    const code = (S.form.opCode || "").trim();
+    if (!code){ S.err = "Введите код доступа."; render(); return; }
+    return run(async () => {
+      const list = await call("opStations", code);
+      S.opl = { step: "pick", code, stations: list }; S.form = {}; top0();
+    });
+  },
+  opPin(){
+    const code = (S.form.newOpPin || "").trim();
+    if (!/^\d{4,8}$/.test(code)){ S.err = "Код — от 4 до 8 цифр."; render(); return; }
+    return run(async () => { S.settings = await call("setOpPin", S.pin, code); S.form.newOpPin = ""; S.note = "Код для операторов изменён: " + code; });
   },
   addSt(){
     const name = (S.form.stName || "").trim(), cap = parseNum(S.form.stCap), lvl = parseNum(S.form.stLevel), sold = parseNum(S.form.stSold);
@@ -857,7 +965,11 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 
 // ---------- пример без сервера (для проверки дизайна) ----------
 const Demo = {
-  st: [], rep: [], del: [],
+  st: [], rep: [], del: [], opPin: "704747",
+  dev: [
+    { dev: "p1", sid: "d1", who: "Мария", owner: false, at: Date.now() - 3*86400000, seen: Date.now() - 40*60000, active: true, push: true, ua: "Android" },
+    { dev: "p2", sid: "d1", who: "Сергей", owner: false, at: Date.now() - 9*86400000, seen: Date.now() - 2*86400000, active: true, push: false, ua: "Android" },
+  ],
   seed(){
     let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     const now = new Date(), today = curWorkDay(), start = parseDate(shiftDate(today, -8)).getTime() + 9*3600000;
@@ -886,16 +998,21 @@ const Demo = {
   state(){
     const st = this.st.map(s => ({ ...s })), rep = this.rep.map(r => ({ ...r }));
     for (const s of st) computeStation(s, rep.filter(r => r.sid === s.id), this.del.filter(d => d.sid === s.id), ms => dkey(new Date(ms - 8*3600000)));
-    return { stations: st, reports: rep, deliveries: this.del.slice() };
+    return { stations: st, reports: rep, deliveries: this.del.slice(), devices: this.dev.map(d => ({ ...d })) };
   },
   async call(fn, a){
     await new Promise(r => setTimeout(r, 250));
-    const settings = { email: "example@gmail.com", emailOn: true, ownerPhones: 1, phones: this.st.map((s,i) => ({ name: s.name, count: i ? 0 : 2 })), sheetUrl: "", defaultPin: false };
+    const settings = { email: "example@gmail.com", emailOn: true, ownerPhones: 1, phones: this.st.map((s,i) => ({ name: s.name, count: i ? 0 : 2 })), sheetUrl: "", defaultPin: false, opPin: this.opPin || "704747" };
     switch (fn){
       case "getState": return this.state();
       case "submitReport": { const p = a[0]; const key = `${p.date}_${p.slot}`; this.rep = this.rep.filter(r => !(r.sid === p.sid && r.key === key)); this.rep.push({ key, sid: p.sid, date: p.date, slot: p.slot, value: p.liters, tank: p.tank, cash: p.cash, at: Date.now() }); return this.state(); }
       case "addDelivery": this.del.push({ id: "v" + Date.now(), sid: a[0].sid, liters: a[0].liters, at: Date.now() }); return this.state();
-      case "ownerLogin": case "getSettings": case "setEmail": return settings;
+      case "ownerLogin": return { ...settings, tok: "demo" };
+      case "getSettings": case "setEmail": return settings;
+      case "setOpPin": this.opPin = a[1]; return { ...settings, opPin: a[1] };
+      case "revokeDevice": case "restoreDevice": { const d = this.dev.find(x => x.dev === a[1]); if (d) d.active = fn === "restoreDevice"; return this.state(); }
+      case "opStations": return this.st.map(s => ({ id: s.id, name: s.name }));
+      case "opRegister": return { tok: "demo", sid: a[0].sid };
       case "addStation": { const p = a[1], t = Date.now(); this.st.push({ id: "d" + t, name: p.name, capacity: p.capacity, baseLevel: p.level, baseAt: t, baseCum: p.sold || 0, createdAt: t }); return this.state(); }
       case "updateStation": { const s = this.st.find(x => x.id === a[1].id); Object.assign(s, { name: a[1].name, capacity: a[1].capacity }); return this.state(); }
       case "fixTank": { const o = this.st.find(x => x.id === a[1].id); Object.assign(o, { baseLevel: a[1].level, baseAt: Date.now(), baseCum: cumNow(o.id) }); return this.state(); }
@@ -926,14 +1043,20 @@ const Demo = {
   if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", e => { if (e.data === "refresh") refresh(); });
   render();
   if (!S.api) return;
-  await registerSW();
-  S.push = pushStatus();
   if (S.pin){
-    try { S.settings = await call("ownerLogin", S.pin); S.owner = true; S.mode = "owner"; }
+    try { const res = await call("ownerLogin", S.pin); S.settings = res; if (res.tok) setTok(res.tok); S.owner = true; S.mode = "owner"; }
     catch(e){ if (/PIN/.test(errText(e))){ S.pin = null; lsSet("agzs.pin", null); } }
   }
+  await registerSW();
+  S.push = pushStatus();
+  if (!S.owner && !S.tok){
+    if (S.usingDefault){   // проверим, что встроенный адрес сервера отвечает
+      try { await call("getState"); } catch(e){ if (!e.code){ S.api = null; } }
+    }
+    render(); return;
+  }
   await refresh();
-  if (!S.ready && S.usingDefault){ S.api = null; S.loadErr = null; render(); return; }   // встроенный адрес не ответил — спросим вручную
+  if (!S.ready && S.usingDefault && S.loadErr){ S.api = null; S.loadErr = null; render(); return; }   // встроенный адрес не ответил — спросим вручную
   if (S.push === "on") quietSync();
 })();
 })();

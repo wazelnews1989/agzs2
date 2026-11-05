@@ -2,6 +2,7 @@
 const params = new URL(self.location).searchParams;
 const API = params.get("api");
 const DEV = params.get("dev");
+const TOK = params.get("tok");
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", e => e.waitUntil(self.clients.claim()));
@@ -13,7 +14,7 @@ self.addEventListener("push", e => {
     let msgs = [];
     try {
       const ctl = new AbortController(); setTimeout(() => ctl.abort(), 15000);
-      const r = await fetch(API, { method: "POST", body: JSON.stringify({ a: "inbox", dev: DEV }), signal: ctl.signal });
+      const r = await fetch(API, { method: "POST", body: JSON.stringify({ a: "inbox", dev: DEV, tok: TOK }), signal: ctl.signal });
       const j = await r.json();
       if (j && j.ok && Array.isArray(j.data)) msgs = j.data;
     } catch (err) {}
