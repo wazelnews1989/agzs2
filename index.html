@@ -205,19 +205,89 @@ const timeStr = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const slotOf = id => SLOTS.find(s => s.id === id);
 function daysWord(n){ const a = n % 10, b = n % 100; if (a === 1 && b !== 11) return "день"; if (a >= 2 && a <= 4 && (b < 12 || b > 14)) return "дня"; return "дней"; }
 
-// ---------- station data (рассчитано сервером) ----------
-function stReports(sid){ return S.reports.filter(r => r.sid === sid).sort((a,b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0); }
-function prevMeterFor(st, key){
-  if (!st.lastKey || key > st.lastKey) return st.lastMeter;
-  const rs = stReports(st.id).filter(r => r.key < key);
-  return rs.length ? rs[rs.length-1].meter : st.startMeter;
+// ---------- данные заправок (продажи и бочку считает сервер) ----------
+/* ===== Логика смен: одинаковая на сервере и в приложении =====
+ * Рабочие сутки идут с 8:00 до 8:00 следующего дня.
+ * 18:00 и 22:00 — литры, проданные с 8:00 (после обнуления смены).
+ * 8:00 — итог за прошедшие сутки (до обнуления), фактический остаток в бочке и деньги в кассе.
+ */
+var SLOT_RANK = { '18': 1, '22': 2, '08': 3 };
+function addDays(key, n) {
+  var p = key.split('-').map(Number);
+  return new Date(Date.UTC(p[0], p[1] - 1, p[2] + n)).toISOString().slice(0, 10);
 }
-function nextMeterFor(st, key){ const rs = stReports(st.id).filter(r => r.key > key); return rs.length ? rs[0].meter : null; }
+/** К каким рабочим суткам относится сводка: утренняя закрывает вчерашние. */
+function workDayOf(r) { return r.slot === '08' ? addDays(r.date, -1) : r.date; }
+/** Раскладывает сводки одной заправки по суткам и считает продажи за каждый период. */
+function shiftDays(reps) {
+  var days = {};
+  reps.forEach(function (r) { var d = workDayOf(r); (days[d] = days[d] || []).push(r); });
+  Object.keys(days).forEach(function (d) {
+    var prev = 0;
+    days[d].sort(function (a, b) { return SLOT_RANK[a.slot] - SLOT_RANK[b.slot]; }).forEach(function (r) {
+      r.day = d; r.sold = r.value - prev; prev = r.value;
+    });
+  });
+  return days;
+}
+function dayCum(list) { return list && list.length ? list[list.length - 1].value : 0; }
+/** Остаток в бочке: последняя известная точка (утренний замер оператора или ввод владельца)
+ *  плюс привозы после неё минус продажи после неё. */
+function tankEstimate(st, reps, dels, days, dayOfMs, cutAt, upToDay) {
+  var base = { level: st.baseLevel, at: st.baseAt, day: dayOfMs(st.baseAt), cum0: st.baseCum || 0, kind: 'owner' };
+  reps.forEach(function (r) {
+    if (r.slot === '08' && r.tank != null && r.at < cutAt && r.at > base.at) base = { level: r.tank, at: r.at, day: r.date, cum0: 0, kind: 'operator' };
+  });
+  var v = base.level;
+  dels.forEach(function (d) { if (d.at > base.at && d.at <= cutAt) v += d.liters; });
+  Object.keys(days).forEach(function (d) {
+    if (d < base.day || d > upToDay) return;
+    var c = dayCum(days[d]);
+    v -= d === base.day ? Math.max(0, c - base.cum0) : c;
+  });
+  return { value: v, base: base };
+}
+/** Пересчитывает всё по заправке: продажи по периодам, остаток сейчас и расчётный остаток к каждому утру. */
+function computeStation(st, reps, dels, dayOfMs) {
+  var days = shiftDays(reps);
+  var now = tankEstimate(st, reps, dels, days, dayOfMs, Infinity, '9999-12-31');
+  st.tank = now.value;
+  st.tankFrom = now.base.kind;
+  st.tankAt = now.base.at;
+  reps.forEach(function (r) {
+    if (r.slot === '08') {
+      r.expected = tankEstimate(st, reps, dels, days, dayOfMs, r.at, r.day).value;
+      r.diff = r.tank != null ? r.tank - r.expected : null;
+    }
+  });
+  return days;
+}
+/** Границы для нового значения литров в сводке: не меньше предыдущей за те же сутки, не больше следующей. */
+function shiftBounds(reps, date, slot) {
+  var probe = { date: date, slot: slot }, day = workDayOf(probe), rank = SLOT_RANK[slot];
+  var lo = 0, hi = null, loSlot = null, hiSlot = null;
+  reps.forEach(function (r) {
+    if (workDayOf(r) !== day || r.slot === slot) return;
+    if (SLOT_RANK[r.slot] < rank && r.value >= lo) { lo = r.value; loSlot = r.slot; }
+    if (SLOT_RANK[r.slot] > rank && (hi == null || r.value < hi)) { hi = r.value; hiSlot = r.slot; }
+  });
+  return { lo: lo, hi: hi, loSlot: loSlot, hiSlot: hiSlot, day: day };
+}
+
+function stReports(sid){ return S.reports.filter(r => r.sid === sid); }
+const curWorkDay = () => dkey(new Date(Date.now() - 8 * 3600000));   // смена идёт с 8:00 до 8:00
+function findRep(sid, date, slot){ return S.reports.find(r => r.sid === sid && r.date === date && r.slot === slot); }
+/** Литры текущей смены (с 8:00) — по последней сводке этих суток. */
+function cumNow(sid){
+  const d = curWorkDay(); let best = null;
+  for (const r of stReports(sid)) if ((r.day || workDayOf(r)) === d && (!best || SLOT_RANK[r.slot] > SLOT_RANK[best.slot])) best = r;
+  return best ? best.value : 0;
+}
+/** Средние продажи в сутки — по утренним итогам за последнюю неделю. */
 function avgDaily(sid){
-  const t = {}; for (const r of stReports(sid)) t[r.date] = (t[r.date] || 0) + r.liters;
-  const today = workDate(); let sum = 0, n = 0;
-  for (let i = 1; i <= 7; i++){ const k = shiftDate(today, -i); if (t[k] != null){ sum += t[k]; n++; } }
-  return n ? sum / n : null;
+  const from = shiftDate(workDate(), -7);
+  const v = stReports(sid).filter(r => r.slot === "08" && r.date >= from).map(r => r.value);
+  return v.length ? v.reduce((a,b) => a + b, 0) / v.length : null;
 }
 function slotState(sid, date, slot){
   const r = S.reports.find(x => x.sid === sid && x.date === date && x.slot === slot.id);
@@ -376,7 +446,8 @@ function tankBlock(st){
     <div class="tank-num"><span class="big num">${fmt(Math.max(0,lvl))} л</span>${st.capacity ? `<span class="of">из ${fmt(st.capacity)} л · ${fmt(lvl/st.capacity*100)} %</span>` : ""}</div>
     ${gauge(st)}
     ${days != null ? `<div class="hint">Хватит примерно на ${days} ${daysWord(days)} (в среднем ${fmt(avg)} л в сутки)</div>` : ""}
-    ${lvl < 0 ? `<div class="msg warn">Уровень ниже нуля — похоже, не записан привоз газа или неверно задан начальный уровень.</div>` : ""}
+    ${st.tankAt ? `<div class="hint">Расчёт от ${st.tankFrom === "operator" ? "утреннего замера оператора" : "уровня, введённого владельцем"} ${esc(dayShort(dkey(new Date(st.tankAt))))}, ${timeStr(new Date(st.tankAt))}: минус продажи, плюс привозы.</div>` : ""}
+    ${lvl < 0 ? `<div class="msg warn">Уровень ниже нуля — похоже, не записан привоз газа или неверно задан уровень.</div>` : ""}
   </div>`;
 }
 function header(){
@@ -408,30 +479,31 @@ function operatorView(){
 
   const now = new Date(), date = workDate(now);
   const slotId = S.opSlot || autoSlot(now);
-  const slot = slotOf(slotId), key = `${date}_${slotId}`;
-  const existing = S.reports.find(r => r.sid === st.id && r.key === key);
-  const prev = prevMeterFor(st, key);
+  const slot = slotOf(slotId), morning = slotId === "08";
+  const existing = findRep(st.id, date, slotId);
+  const b = shiftBounds(stReports(st.id), date, slotId);
+  const fld = (id, label, hint, ph) => `<div class="field"><label for="${id}">${label}</label>${hint ? `<p class="hint" style="margin:0">${hint}</p>` : ""}
+      <input id="${id}" class="meter" data-f="${id}" inputmode="decimal" autocomplete="off" placeholder="${ph || "0"}" value="${esc(S.form[id] || "")}"></div>`;
+  const prevLine = b.loSlot ? `<div class="prev"><span>${b.loSlot === "18" ? "В 18:00 было" : "В 22:00 было"}</span><span class="num">${fmt(b.lo)} л</span></div>` : "";
 
   return `
   <div class="today"><span class="d">${dayLong(now)} · ${timeStr(now)}</span>
     <div class="row"><span class="t">${esc(st.name)}</span><button type="button" class="link" data-act="unpick">Другая заправка</button></div></div>
   ${S.push !== "on" ? pushCard(false) : ""}
-  ${tankBlock(st)}
   <div class="card">
     <div class="label">Какую сводку отправляете</div>
     <div class="slots">${SLOTS.map(s => {
-      const done = S.reports.some(r => r.sid === st.id && r.date === date && r.slot === s.id);
+      const done = !!findRep(st.id, date, s.id);
       return `<button type="button" class="slot" data-act="slot" data-slot="${s.id}" aria-pressed="${s.id===slotId}">
         <b>${s.label}</b><span>${s.time}</span>${done ? "<em>✓ отправлена</em>" : ""}</button>`; }).join("")}</div>
   </div>
   <form class="card" data-submit="report" novalidate>
-    ${existing ? `<div class="msg ok">Сводка «${slot.label}» уже отправлена в ${timeStr(new Date(existing.at))}: продано ${fmt(existing.liters,1)} л. Если ошиблись — введите правильное показание.</div>` : ""}
-    <div class="field">
-      <label for="meter">Показание счётчика колонки</label>
-      <div class="prev"><span>Прошлое показание</span><span class="num">${fmt(prev,2)}</span></div>
-      <input id="meter" class="meter" data-f="meter" inputmode="decimal" autocomplete="off" placeholder="${esc(fmt(prev,0))}" value="${esc(S.form.meter || "")}">
-    </div>
-    <div id="calc">${calcHtml(st, key, prev)}</div>
+    ${existing ? `<div class="msg ok">Сводка «${slot.label}» уже отправлена в ${timeStr(new Date(existing.at))}: ${fmt(existing.value,1)} л${morning ? ` за сутки, касса ${fmt(existing.cash)} ₽, в бочке ${fmt(existing.tank)} л` : " с 8:00"}. Если ошиблись — отправьте ещё раз с правильными цифрами.</div>` : ""}
+    ${morning
+      ? fld("liters", "Продано литров за сутки", "Цифра смены на колонке перед обнулением: с 8:00 вчера до 8:00 сегодня.") + prevLine
+      : fld("liters", "Продано литров с 8:00", "Цифра смены на колонке после утреннего обнуления.") + prevLine}
+    <div id="calc">${calcHtml(b, morning)}</div>
+    ${morning ? fld("tank", "Остаток газа в бочке, л", "По уровнемеру на бочке.") + fld("cash", "Деньги в кассе, ₽", "Вся сумма, которая сейчас в кассе.") : ""}
     ${S.err ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}
     <button type="submit" class="btn btn-main" ${S.busy ? "disabled" : ""}>${S.busy ? "Отправляю…" : S.confirm === "big" ? "Да, всё верно — отправить" : `Отправить сводку «${slot.label}»`}</button>
   </form>
@@ -443,20 +515,17 @@ function syncLine(){
   if (!S.lastSync) return "";
   return `<div class="sync">Обновлено в ${timeStr(new Date(S.lastSync))} · <button type="button" class="link" style="font-size:14px;min-height:0;padding:0" data-act="reload">обновить</button></div>`;
 }
-function calcHtml(st, key, prev){
-  const v = parseNum(S.form.meter);
-  if (!Number.isFinite(v)) return `<div class="calc"><span>Продано за смену</span><span class="v">— л</span></div>`;
-  const next = nextMeterFor(st, key);
-  if (v < prev) return `<div class="msg bad" role="alert">Число меньше прошлого показания (${fmt(prev,2)}). Проверьте цифры на счётчике.</div>`;
-  if (next != null && v > next) return `<div class="msg bad" role="alert">Число больше, чем в следующей сводке (${fmt(next,2)}). Проверьте цифры.</div>`;
-  const l = v - prev;
-  return `<div class="calc ok"><span>Продано за смену</span><span class="v">${fmt(l,1)} л</span></div>
-    ${l > BIG_LITERS ? `<div class="msg warn">Это очень много для одной смены. Проверьте, нет ли лишней цифры.</div>` : ""}`;
+function calcHtml(b, morning){
+  const v = parseNum(S.form.liters);
+  if (!Number.isFinite(v) || !b.loSlot) return "";
+  if (v < b.lo) return `<div class="msg bad" role="alert">Меньше, чем в ${b.loSlot === "18" ? "18:00" : "22:00"} (${fmt(b.lo)} л). Литры смены с 8:00 не уменьшаются — проверьте цифры.</div>`;
+  if (b.hi != null && v > b.hi) return `<div class="msg bad" role="alert">Больше, чем в следующей сводке (${fmt(b.hi)} л). Проверьте цифры.</div>`;
+  return `<div class="calc ok"><span>${b.loSlot === "18" ? "С 18:00 продано" : "С 22:00 продано"}</span><span class="v">${fmt(v - b.lo,1)} л</span></div>`;
 }
 function updateCalc(){
   const st = S.stations.find(s => s.id === S.sid); const el = document.getElementById("calc"); if (!st || !el) return;
-  const key = `${workDate()}_${S.opSlot || autoSlot()}`;
-  el.innerHTML = calcHtml(st, key, prevMeterFor(st, key));
+  const slotId = S.opSlot || autoSlot();
+  el.innerHTML = calcHtml(shiftBounds(stReports(st.id), workDate(), slotId), slotId === "08");
 }
 function deliveryView(st){
   return `<button type="button" class="link back" data-act="home">← Назад</button>
@@ -472,12 +541,13 @@ function deliveryView(st){
 function flashView(st){
   const f = S.flash;
   const title = f.type === "report" ? "Сводка отправлена" : "Привоз записан";
-  const line = f.type === "report" ? `${f.label}: продано <b class="num">${fmt(f.liters,1)} л</b>` : `В бочку добавлено <b class="num">${fmt(f.liters)} л</b>`;
+  const line = f.type === "report"
+    ? (f.morning ? `За сутки продано <b class="num">${fmt(f.liters,1)} л</b><br>В кассе <b class="num">${fmt(f.cash)} ₽</b>` : `С 8:00 продано <b class="num">${fmt(f.liters,1)} л</b>`)
+    : `В бочку добавлено <b class="num">${fmt(f.liters)} л</b>`;
   return `<div class="card done">
     <div class="check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="var(--surface)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
     <h1 style="font-size:30px">${title}</h1>
     <p style="margin:0;font-size:22px">${line}</p>
-    <p class="hint" style="margin:0">В бочке сейчас примерно <b class="num">${fmt(Math.max(0,st.tank))} л</b></p>
     <button type="button" class="btn btn-ok" data-act="done">Готово</button>
   </div>`;
 }
@@ -501,30 +571,36 @@ function ownerView(){
     + (S.push !== "on" ? pushCard(true) : "");
   if (!S.stations.length){
     return `${pinWarn}<div class="card empty"><h2>Добавьте первую заправку</h2>
-      <p class="hint" style="margin:0">Укажите объём бочки, сколько в ней газа сейчас и показание счётчика колонки. Дальше приложение считает само.</p>
+      <p class="hint" style="margin:0">Укажите объём бочки и сколько в ней газа сейчас. Дальше приложение считает само по сводкам операторов.</p>
       <button type="button" class="btn btn-main" data-act="add">Добавить заправку</button></div>
       <button type="button" class="btn btn-soft" data-act="settings">Уведомления и настройки</button>`;
   }
-  let total = 0, missing = 0, low = 0;
+  let total = 0, missing = 0, low = 0, cash = 0, anyCash = false;
   const cards = S.stations.map(st => {
     const states = SLOTS.map(s => ({ s, ...slotState(st.id, date, s) }));
-    const dayL = states.reduce((a,x) => a + (x.r ? x.r.liters : 0), 0); total += dayL;
+    const dayL = cumNow(st.id); total += dayL;
     missing += states.filter(x => x.st === "late").length;
     const lvl = st.tank, pct = st.capacity ? lvl / st.capacity * 100 : null;
     if (pct != null && pct < LOW_PCT) low++;
     const avg = avgDaily(st.id), days = avg ? Math.floor(Math.max(0,lvl)/avg) : null;
+    const m = findRep(st.id, date, "08");
+    if (m && m.cash != null){ cash += m.cash; anyCash = true; }
+    const diff = m && m.diff != null ? Math.round(m.diff) : null;
+    const mLine = m ? `<div class="tank-line">Утром: бочка <b class="num">${fmt(m.tank)} л</b>${diff != null ? `, расчёт ${fmt(Math.round(m.expected))} л <span class="${Math.abs(diff) >= 50 ? "badge" : "num"}">${diff > 0 ? "+" : ""}${fmt(diff)} л</span>` : ""} · касса <b class="num">${fmt(m.cash)} ₽</b></div>` : "";
     return `<button type="button" class="card st-card" data-act="detail" data-sid="${esc(st.id)}">
       <div class="st-head"><span class="st-name">${esc(st.name)}</span><span class="st-total">${fmt(dayL)} л</span></div>
-      <div class="tank-line">В бочке <b class="num">${fmt(Math.max(0,lvl))} л</b>${pct != null ? ` · ${fmt(pct)} %` : ""}${days != null ? ` · ≈ ${days} ${daysWord(days)}` : ""} ${pct != null && pct < LOW_PCT ? `<span class="badge">Мало газа</span>` : ""}</div>
+      <div class="tank-line">В бочке ≈ <b class="num">${fmt(Math.max(0,lvl))} л</b>${pct != null ? ` · ${fmt(pct)} %` : ""}${days != null ? ` · ≈ ${days} ${daysWord(days)}` : ""} ${pct != null && pct < LOW_PCT ? `<span class="badge">Мало газа</span>` : ""}</div>
       ${gauge(st, true)}
+      ${mLine}
       <div class="chips">${states.map(x => `<div class="chip ${x.st}"><b>${x.s.label}</b>${
-        x.st === "ok" ? `<span class="num">${fmt(x.r.liters)} л</span>` : x.st === "wait" ? `в ${x.s.time}` : x.st === "none" ? "—" : x.st === "soon" ? "ждём" : "нет сводки"}</div>`).join("")}</div>
+        x.st === "ok" ? `<span class="num">${fmt(x.r.value)} л</span>${x.s.id === "08" ? "<br>за сутки" : "<br>с 8:00"}` : x.st === "wait" ? `в ${x.s.time}` : x.st === "none" ? "—" : x.st === "soon" ? "ждём" : "нет сводки"}</div>`).join("")}</div>
     </button>`;
   }).join("");
   return `${pinWarn}<div class="today"><span class="d">${dayLong(parseDate(date))}</span><span class="t">Сводка за день</span></div>
     <div class="sum">
-      <div><div class="label">Продано сегодня</div><div class="v">${fmt(total)} л</div></div>
+      <div><div class="label">Продано с 8:00</div><div class="v">${fmt(total)} л</div></div>
       <div><div class="label">Нет сводок</div><div class="v ${missing ? "bad" : "ok"}">${missing}</div></div>
+      ${anyCash ? `<div style="grid-column:1/-1"><div class="label">Касса утром, всего</div><div class="v">${fmt(cash)} ₽</div></div>` : ""}
     </div>
     ${low ? `<div class="msg bad">Мало газа на ${low === 1 ? "одной заправке" : low + " заправках"} — пора заказывать газовоз.</div>` : ""}
     ${cards}
@@ -535,25 +611,30 @@ function ownerView(){
 function detailView(){
   const st = S.stations.find(s => s.id === S.detailSid);
   if (!st){ S.view = "home"; return ownerView(); }
-  const today = workDate(), rs = stReports(st.id);
-  const rows = [];
+  const today = curWorkDay(), rs = stReports(st.id);
+  const cell = r => r ? `<td class="num">${fmt(r.sold)}</td>` : `<td class="num">—</td>`;
+  const rows = [], mrows = [];
   for (let i = 0; i < 7; i++){
-    const d = shiftDate(today, -i); let tot = 0, any = false;
-    const cells = SLOTS.map(s => {
-      const r = rs.find(x => x.date === d && x.slot === s.id);
-      if (r){ tot += r.liters; any = true; return `<td class="num">${fmt(r.liters)}</td>`; }
-      return slotState(st.id, d, s).st === "late" ? `<td class="miss">нет</td>` : `<td class="num">—</td>`;
-    }).join("");
-    rows.push(`<tr><td>${i === 0 ? "Сегодня" : esc(dayShort(d))}</td>${cells}<td class="num tot">${any ? fmt(tot) : "—"}</td></tr>`);
+    const d = shiftDate(today, -i), next = shiftDate(d, 1);
+    const r18 = rs.find(x => x.date === d && x.slot === "18"), r22 = rs.find(x => x.date === d && x.slot === "22"), r08 = rs.find(x => x.date === next && x.slot === "08");
+    const tot = r08 ? r08.value : (r22 || r18) ? (r22 || r18).value : null;
+    rows.push(`<tr><td>${i === 0 ? "Сегодня" : esc(dayShort(d))}</td>${cell(r18)}${cell(r22)}${cell(r08)}<td class="num tot">${tot == null ? "—" : fmt(tot) + (r08 ? "" : "…")}</td></tr>`);
   }
+  rs.filter(x => x.slot === "08").sort((a,b) => a.date < b.date ? 1 : -1).slice(0, 7).forEach(m => {
+    const diff = m.diff != null ? Math.round(m.diff) : null;
+    mrows.push(`<tr><td>${esc(dayShort(m.date))}</td><td class="num">${fmt(m.tank)}</td><td class="num">${m.expected != null ? fmt(Math.round(m.expected)) : "—"}</td><td class="num${diff != null && Math.abs(diff) >= 50 ? " miss" : ""}">${diff == null ? "—" : (diff > 0 ? "+" : "") + fmt(diff)}</td><td class="num">${fmt(m.cash)}</td></tr>`);
+  });
   const dl = S.deliveries.filter(d => d.sid === st.id).sort((a,b) => b.at - a.at).slice(0, 8);
   const c = S.confirm;
   return `<button type="button" class="link back" data-act="home">← Все заправки</button>
   <h1 style="font-size:28px">${esc(st.name)}</h1>
   ${tankBlock(st)}
-  <div class="card"><div class="label">Продажи за 7 дней, литры</div>
-    <div class="tbl-wrap"><table><thead><tr><th>День</th>${SLOTS.map(s => `<th>${s.label}</th>`).join("")}<th>Итого</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>
-    <div class="hint">Показание счётчика сейчас: <span class="num">${fmt(st.lastMeter,2)}</span></div></div>
+  <div class="card"><div class="label">Продажи по сменам, литры</div>
+    <div class="tbl-wrap"><table><thead><tr><th>Сутки с 8:00</th><th>8–18</th><th>18–22</th><th>22–8</th><th>Всего</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>
+    <div class="hint">«…» — сутки ещё не закрыты утренней сводкой.</div></div>
+  <div class="card"><div class="label">Утренние сводки</div>
+    ${mrows.length ? `<div class="tbl-wrap"><table><thead><tr><th>Утро</th><th>Бочка, л</th><th>Расчёт</th><th>Разница</th><th>Касса, ₽</th></tr></thead><tbody>${mrows.join("")}</tbody></table></div>
+    <div class="hint">Расчёт — сколько должно было остаться по продажам и привозам. Разница от 50 л выделена красным.</div>` : `<div class="hint">Утренних сводок пока нет.</div>`}</div>
   <div class="card"><div class="label">Привозы газа</div>
     ${dl.length ? `<div class="list">${dl.map(d => `<div><span>${esc(dayShort(dkey(new Date(d.at))))}, ${timeStr(new Date(d.at))} · <b class="num">+${fmt(d.liters)} л</b></span>
       <button type="button" class="mini danger" data-act="delDl" data-id="${esc(d.id)}">${c === "dl:"+d.id ? "Точно удалить?" : "Удалить"}</button></div>`).join("")}</div>`
@@ -579,7 +660,7 @@ function addView(){
     ${f("stName","Название","Как операторы её называют, например «АГЗС на Южной».")}
     ${f("stCap","Объём бочки, л","По паспорту ёмкости.",true)}
     ${f("stLevel","Сколько газа в бочке сейчас, л","",true)}
-    ${f("stMeter","Показание счётчика колонки сейчас","С этой цифры начнётся подсчёт продаж.",true)}
+    ${f("stSold","Сколько уже продано с 8:00 сегодня, л","Цифра смены на колонке. Если не знаете, оставьте пустым.",true)}
     ${S.err ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}
     <button type="submit" class="btn btn-main" ${S.busy ? "disabled" : ""}>${S.busy ? "Сохраняю…" : "Добавить заправку"}</button>
   </form>`;
@@ -639,7 +720,7 @@ const A = {
   mode(d){ S.mode = d.m; S.view = "home"; S.flash = null; S.err = null; S.confirm = null; },
   pick(d){ S.sid = d.sid; lsSet("agzs.sid", d.sid); S.view = "home"; S.opSlot = null; S.form = {}; quietSync(); },
   unpick(){ S.sid = null; lsSet("agzs.sid", null); },
-  slot(d){ S.opSlot = d.slot; S.form.meter = ""; S.confirm = null; S.err = null; },
+  slot(d){ S.opSlot = d.slot; S.form.liters = S.form.tank = S.form.cash = ""; S.confirm = null; S.err = null; },
   home(){ S.view = "home"; S.err = null; S.note = null; S.confirm = null; S.form = {}; top0(); },
   reload(){ S.loadErr = null; S.push = pushStatus(); if (S.push === "on") quietSync(); refresh(); return Promise.resolve(); },
   openDelivery(){ S.view = "delivery"; S.form.dl = ""; S.err = null; },
@@ -674,17 +755,21 @@ const A = {
 const SUBMIT = {
   report(){
     const st = S.stations.find(s => s.id === S.sid); if (!st) return;
-    const date = workDate(), slotId = S.opSlot || autoSlot(), key = `${date}_${slotId}`;
-    const v = parseNum(S.form.meter);
-    if (!Number.isFinite(v)){ S.err = "Введите цифры со счётчика колонки."; render(); return; }
-    const prev = prevMeterFor(st, key), next = nextMeterFor(st, key);
-    if (v < prev || (next != null && v > next)){ S.err = "Проверьте показание — оно не сходится с другими сводками."; render(); return; }
-    if (v - prev > BIG_LITERS && S.confirm !== "big"){ S.confirm = "big"; render(); return; }
+    const date = workDate(), slotId = S.opSlot || autoSlot(), morning = slotId === "08";
+    const v = parseNum(S.form.liters), tank = parseNum(S.form.tank), cash = parseNum(S.form.cash);
+    if (!Number.isFinite(v) || v < 0){ S.err = morning ? "Введите, сколько литров продано за сутки." : "Введите, сколько литров продано с 8:00."; render(); return; }
+    const b = shiftBounds(stReports(st.id), date, slotId);
+    if (v < b.lo || (b.hi != null && v > b.hi)){ S.err = "Проверьте литры — они не сходятся с другими сводками этих суток."; render(); return; }
+    if (morning){
+      if (!Number.isFinite(tank) || tank < 0){ S.err = "Введите остаток газа в бочке."; render(); return; }
+      if (st.capacity && tank > st.capacity){ S.err = `Остаток больше объёма бочки (${fmt(st.capacity)} л). Проверьте цифры.`; render(); return; }
+      if (!Number.isFinite(cash) || cash < 0){ S.err = "Введите, сколько денег в кассе."; render(); return; }
+    }
+    if (v - b.lo > BIG_LITERS && S.confirm !== "big"){ S.confirm = "big"; render(); return; }
     S.confirm = null;
     return run(async () => {
-      applyState(await call("submitReport", { sid: st.id, date, slot: slotId, meter: v }));
-      const r = S.reports.find(x => x.sid === st.id && x.key === key);
-      S.flash = { type: "report", liters: r ? r.liters : v - prev, label: slotOf(slotId).label }; S.form.meter = ""; top0();
+      applyState(await call("submitReport", { sid: st.id, date, slot: slotId, liters: v, tank: morning ? tank : null, cash: morning ? cash : null }));
+      S.flash = { type: "report", liters: v, cash, morning }; S.form.liters = S.form.tank = S.form.cash = ""; top0();
     });
   },
   delivery(){
@@ -706,13 +791,12 @@ const SUBMIT = {
     });
   },
   addSt(){
-    const name = (S.form.stName || "").trim(), cap = parseNum(S.form.stCap), lvl = parseNum(S.form.stLevel), m = parseNum(S.form.stMeter);
+    const name = (S.form.stName || "").trim(), cap = parseNum(S.form.stCap), lvl = parseNum(S.form.stLevel), sold = parseNum(S.form.stSold);
     if (!name){ S.err = "Впишите название заправки."; render(); return; }
     if (!Number.isFinite(lvl) || lvl < 0){ S.err = "Впишите, сколько газа в бочке сейчас."; render(); return; }
-    if (!Number.isFinite(m) || m < 0){ S.err = "Впишите показание счётчика колонки."; render(); return; }
     if (Number.isFinite(cap) && lvl > cap){ S.err = "Газа в бочке больше, чем её объём. Проверьте цифры."; render(); return; }
     return run(async () => {
-      applyState(await call("addStation", S.pin, { name, capacity: Number.isFinite(cap) ? cap : null, level: lvl, meter: m }));
+      applyState(await call("addStation", S.pin, { name, capacity: Number.isFinite(cap) ? cap : null, level: lvl, sold: Number.isFinite(sold) ? sold : 0 }));
       S.view = "home"; S.form = {};
     });
   },
@@ -756,7 +840,7 @@ document.addEventListener("submit", e => {
 document.addEventListener("input", e => {
   const k = e.target.dataset && e.target.dataset.f; if (!k) return;
   S.form[k] = e.target.value;
-  if (k === "meter"){ if (S.confirm === "big"){ S.confirm = null; render(); } else updateCalc(); }
+  if (k === "liters"){ if (S.confirm === "big"){ S.confirm = null; render(); } else updateCalc(); }
   if (S.err){ S.err = null; const m = document.querySelector('.msg.bad[role="alert"]'); if (m && !m.closest("#calc")) m.remove(); }
 });
 setInterval(() => { if (document.visibilityState === "visible" && !S.busy) refresh(); }, 60000);
@@ -767,47 +851,44 @@ const Demo = {
   st: [], rep: [], del: [],
   seed(){
     let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    const now = new Date(), today = workDate(now), start = parseDate(shiftDate(today, -8)).getTime();
+    const now = new Date(), today = curWorkDay(), start = parseDate(shiftDate(today, -8)).getTime() + 9*3600000;
     this.st = [
-      { id: "d1", name: "АГЗС на Южной (пример)", capacity: 10000, startMeter: 248310, baseMeter: 248310, baseLevel: 8200, baseAt: start, createdAt: start },
-      { id: "d2", name: "АГЗС у трассы (пример)", capacity: 20000, startMeter: 517902, baseMeter: 517902, baseLevel: 15100, baseAt: start, createdAt: start + 1 },
+      { id: "d1", name: "Промка (пример)", capacity: 10000, baseLevel: 9000, baseAt: start, baseCum: 0, createdAt: start },
+      { id: "d2", name: "У трассы (пример)", capacity: 20000, baseLevel: 17000, baseAt: start, baseCum: 0, createdAt: start + 1 },
     ];
-    const cur = autoSlot(now);
+    this.del.push({ id: "v1", sid: "d1", liters: 5000, at: parseDate(shiftDate(today, -4)).getTime() + 14*3600000 });
     for (const st of this.st){
-      let m = st.startMeter;
       for (let i = 7; i >= 0; i--){
-        const date = shiftDate(today, -i);
-        for (const sl of SLOTS){
-          if (i === 0 && sl.id >= cur) continue;
-          if (i === 0 && st.id === "d2" && sl.id === "08") continue;
-          m = +(m + Math.round((sl.id === "18" ? 500 : 250) + rnd() * 400)).toFixed(2);
-          this.rep.push({ key: `${date}_${sl.id}`, sid: st.id, date, slot: sl.id, meter: m, at: parseDate(date).getTime() + sl.due*3600000 });
-        }
+        const d = shiftDate(today, -i), next = shiftDate(d, 1), t0 = parseDate(d).getTime();
+        const c18 = Math.round(500 + rnd() * 300), c22 = c18 + Math.round(200 + rnd() * 150), tot = c22 + Math.round(100 + rnd() * 150);
+        const push = (date, slot, value, at, extra) => { if (at < Date.now()) this.rep.push({ key: `${date}_${slot}`, sid: st.id, date, slot, value, at, ...extra }); };
+        push(d, "18", c18, t0 + 18*3600000 + 300000);
+        push(d, "22", c22, t0 + 22*3600000 + 300000);
+        if (!(i === 1 && st.id === "d2")) push(next, "08", tot, t0 + 32*3600000 + 300000, { tank: null, cash: Math.round(30000 + rnd() * 40000) });
       }
+      // фактический остаток утром — расчётный плюс небольшая погрешность
+      this.rep.filter(r => r.sid === st.id && r.slot === "08").sort((a,b) => a.at - b.at).forEach(r => {
+        const s = this.state().stations.find(x => x.id === st.id), m = this.state().reports.find(x => x.key === r.key && x.sid === st.id);
+        r.tank = Math.round(m.expected + (rnd() - 0.6) * 80);
+      });
     }
-    this.del.push({ id: "v1", sid: "d1", liters: 5000, at: Date.now() - 4*86400000 });
   },
   state(){
     const st = this.st.map(s => ({ ...s })), rep = this.rep.map(r => ({ ...r }));
-    for (const s of st){
-      const rs = rep.filter(r => r.sid === s.id).sort((a,b) => a.key < b.key ? -1 : 1);
-      let prev = s.startMeter; rs.forEach(r => { r.liters = r.meter - prev; prev = r.meter; });
-      s.lastMeter = rs.length ? rs[rs.length-1].meter : s.startMeter; s.lastKey = rs.length ? rs[rs.length-1].key : "";
-      s.tank = s.baseLevel + this.del.filter(d => d.sid === s.id && d.at > s.baseAt).reduce((a,d) => a + d.liters, 0) - Math.max(0, s.lastMeter - s.baseMeter);
-    }
+    for (const s of st) computeStation(s, rep.filter(r => r.sid === s.id), this.del.filter(d => d.sid === s.id), ms => dkey(new Date(ms - 8*3600000)));
     return { stations: st, reports: rep, deliveries: this.del.slice() };
   },
   async call(fn, a){
     await new Promise(r => setTimeout(r, 250));
-    const settings = { email: "example@gmail.com", emailOn: true, ownerPhones: 1, phones: this.st.map((s,i) => ({ name: s.name, count: i ? 0 : 2 })), sheetUrl: "", defaultPin: true };
+    const settings = { email: "example@gmail.com", emailOn: true, ownerPhones: 1, phones: this.st.map((s,i) => ({ name: s.name, count: i ? 0 : 2 })), sheetUrl: "", defaultPin: false };
     switch (fn){
       case "getState": return this.state();
-      case "submitReport": { const p = a[0]; const key = `${p.date}_${p.slot}`; this.rep = this.rep.filter(r => !(r.sid === p.sid && r.key === key)); this.rep.push({ ...p, key, at: Date.now() }); return this.state(); }
+      case "submitReport": { const p = a[0]; const key = `${p.date}_${p.slot}`; this.rep = this.rep.filter(r => !(r.sid === p.sid && r.key === key)); this.rep.push({ key, sid: p.sid, date: p.date, slot: p.slot, value: p.liters, tank: p.tank, cash: p.cash, at: Date.now() }); return this.state(); }
       case "addDelivery": this.del.push({ id: "v" + Date.now(), sid: a[0].sid, liters: a[0].liters, at: Date.now() }); return this.state();
-      case "ownerLogin": case "getSettings": case "setEmail": case "setChat": return settings;
-      case "addStation": { const p = a[1], t = Date.now(); this.st.push({ id: "d" + t, name: p.name, capacity: p.capacity, startMeter: p.meter, baseMeter: p.meter, baseLevel: p.level, baseAt: t, createdAt: t }); return this.state(); }
+      case "ownerLogin": case "getSettings": case "setEmail": return settings;
+      case "addStation": { const p = a[1], t = Date.now(); this.st.push({ id: "d" + t, name: p.name, capacity: p.capacity, baseLevel: p.level, baseAt: t, baseCum: p.sold || 0, createdAt: t }); return this.state(); }
       case "updateStation": { const s = this.st.find(x => x.id === a[1].id); Object.assign(s, { name: a[1].name, capacity: a[1].capacity }); return this.state(); }
-      case "fixTank": { const s = this.state().stations.find(x => x.id === a[1].id), o = this.st.find(x => x.id === a[1].id); Object.assign(o, { baseLevel: a[1].level, baseAt: Date.now(), baseMeter: s.lastMeter }); return this.state(); }
+      case "fixTank": { const o = this.st.find(x => x.id === a[1].id); Object.assign(o, { baseLevel: a[1].level, baseAt: Date.now(), baseCum: cumNow(o.id) }); return this.state(); }
       case "deleteStation": this.st = this.st.filter(x => x.id !== a[1]); return this.state();
       case "deleteDelivery": this.del = this.del.filter(x => x.id !== a[1]); return this.state();
       case "subscribe": return { ok: true };
