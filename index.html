@@ -150,6 +150,14 @@ td.num{font-family:var(--f-num)} td.miss{color:var(--bad);font-family:var(--f-bo
 .stack{display:flex;flex-direction:column;gap:12px}
 .back{align-self:flex-start}
 
+.slots{grid-template-columns:repeat(4,1fr);gap:6px}
+.slot{padding:10px 2px;min-height:90px}
+.slot b{font-size:19px} .slot span{font-size:16px} .slot em{font-size:13px}
+.chips{grid-template-columns:repeat(4,1fr);gap:5px}
+.chip{font-size:13px;padding:7px 3px}
+.chip b{font-size:15px}
+/* шкала бочки: от тёмно-красного (пусто) до ярко-зелёного (100 %) */
+.gauge-fill{background-color:#7A0A0A;background-image:linear-gradient(90deg,#7A0A0A 0%,#C62828 18%,#EF6C00 38%,#F9C80E 58%,#7CD13A 80%,#00E04B 100%);background-repeat:no-repeat;background-position:0 0}
 body{margin:0;padding-top:max(12px,env(safe-area-inset-top,0px))}
 ol.steps{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:8px;font-size:18px}
 ol.steps code{font-family:var(--f-num);font-size:16px;background:var(--sunk);padding:1px 6px;border-radius:6px}
@@ -172,6 +180,7 @@ ol.steps code{font-family:var(--f-num);font-size:16px;background:var(--sunk);pad
 "use strict";
 const SLOTS = [
   { id: "08", label: "Утро",  time: "8:00",  due: 8  },
+  { id: "14", label: "День",  time: "14:00", due: 14 },
   { id: "18", label: "Вечер", time: "18:00", due: 18 },
   { id: "22", label: "Ночь",  time: "22:00", due: 22 },
 ];
@@ -192,7 +201,7 @@ function lsSet(k,v){ try { v == null ? localStorage.removeItem(k) : localStorage
 const pad = n => String(n).padStart(2,"0");
 const dkey = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 function workDate(now = new Date()){ const d = new Date(now); if (d.getHours() < 4) d.setDate(d.getDate()-1); return dkey(d); }
-function autoSlot(now = new Date()){ const h = now.getHours(); if (h < 4) return "22"; if (h < 13) return "08"; if (h < 20) return "18"; return "22"; }
+function autoSlot(now = new Date()){ const h = now.getHours(); if (h < 4) return "22"; if (h < 11) return "08"; if (h < 16) return "14"; if (h < 20) return "18"; return "22"; }
 function shiftDate(key, days){ const [y,m,d] = key.split("-").map(Number); const x = new Date(y, m-1, d); x.setDate(x.getDate()+days); return dkey(x); }
 function parseDate(key){ const [y,m,d] = key.split("-").map(Number); return new Date(y, m-1, d); }
 const fmt = (n, dec = 0) => Number.isFinite(n) ? n.toLocaleString("ru-RU", { maximumFractionDigits: dec }) : "—";
@@ -208,10 +217,10 @@ function daysWord(n){ const a = n % 10, b = n % 100; if (a === 1 && b !== 11) re
 // ---------- данные заправок (продажи и бочку считает сервер) ----------
 /* ===== Логика смен: одинаковая на сервере и в приложении =====
  * Рабочие сутки идут с 8:00 до 8:00 следующего дня.
- * 18:00 и 22:00 — литры, проданные с 8:00 (после обнуления смены).
+ * 14:00, 18:00 и 22:00 — литры, проданные с 8:00 (после обнуления смены).
  * 8:00 — итог за прошедшие сутки (до обнуления), фактический остаток в бочке и деньги в кассе.
  */
-var SLOT_RANK = { '18': 1, '22': 2, '08': 3 };
+var SLOT_RANK = { '14': 1, '18': 2, '22': 3, '08': 4 };
 function addDays(key, n) {
   var p = key.split('-').map(Number);
   return new Date(Date.UTC(p[0], p[1] - 1, p[2] + n)).toISOString().slice(0, 10);
@@ -409,7 +418,7 @@ function pushCard(forOwner){
     <p class="hint" style="margin:0">${IOS ? "Настройки iPhone → Уведомления → Сводки → включите «Допуск уведомлений»." : "Нажмите на значок слева от адреса сайта → «Уведомления» → «Разрешить». В Safari на Mac: Safari → Настройки → Веб-сайты → Уведомления."} Потом вернитесь сюда.</p>
     <button type="button" class="btn btn-soft" data-act="reload">Я разрешил — проверить</button></div>`;
   return `<div class="card notice"><h2>Включите уведомления</h2>
-    <p class="hint" style="margin:0">${forOwner ? "Сюда будут приходить сводки по всем заправкам и тревоги." : "Телефон напомнит в 8:00, 18:00 и 22:00, если сводка ещё не отправлена."}</p>
+    <p class="hint" style="margin:0">${forOwner ? "Сюда будут приходить сводки по всем заправкам и тревоги." : "Телефон напомнит в 8:00, 14:00, 18:00 и 22:00, если сводка ещё не отправлена."}</p>
     <button type="button" class="btn btn-main" data-act="enablePush" ${S.busy ? "disabled" : ""}>Включить уведомления</button>
     ${S.err && S.errAt === "push" ? `<div class="msg bad" role="alert">${esc(S.err)}</div>` : ""}</div>`;
 }
@@ -433,9 +442,9 @@ function setupView(){
 function gauge(st, small){
   if (!st.capacity) return "";
   const pct = Math.max(0, Math.min(100, st.tank / st.capacity * 100));
-  const cls = pct < 15 ? "crit" : pct < 30 ? "low" : "";
+  const scale = (10000 / Math.max(pct, 0.5)).toFixed(1);   // градиент растянут на всю шкалу, заливка показывает её часть
   return `<div class="gauge-wrap"><div class="gauge${small ? " sm" : ""}" role="img" aria-label="Заполнено на ${fmt(pct)} %">
-    <div class="gauge-fill ${cls}" style="width:${pct.toFixed(1)}%"></div>
+    <div class="gauge-fill" style="width:${pct.toFixed(1)}%;background-size:${scale}% 100%"></div>
     <div class="gauge-max" style="left:${MAX_FILL}%"><span>макс. ${MAX_FILL}%</span></div></div></div>`;
 }
 function tankBlock(st){
@@ -484,7 +493,7 @@ function operatorView(){
   const b = shiftBounds(stReports(st.id), date, slotId);
   const fld = (id, label, hint, ph) => `<div class="field"><label for="${id}">${label}</label>${hint ? `<p class="hint" style="margin:0">${hint}</p>` : ""}
       <input id="${id}" class="meter" data-f="${id}" inputmode="decimal" autocomplete="off" placeholder="${ph || "0"}" value="${esc(S.form[id] || "")}"></div>`;
-  const prevLine = b.loSlot ? `<div class="prev"><span>${b.loSlot === "18" ? "В 18:00 было" : "В 22:00 было"}</span><span class="num">${fmt(b.lo)} л</span></div>` : "";
+  const prevLine = b.loSlot ? `<div class="prev"><span>В ${slotOf(b.loSlot).time} было</span><span class="num">${fmt(b.lo)} л</span></div>` : "";
 
   return `
   <div class="today"><span class="d">${dayLong(now)} · ${timeStr(now)}</span>
@@ -495,7 +504,7 @@ function operatorView(){
     <div class="slots">${SLOTS.map(s => {
       const done = !!findRep(st.id, date, s.id);
       return `<button type="button" class="slot" data-act="slot" data-slot="${s.id}" aria-pressed="${s.id===slotId}">
-        <b>${s.label}</b><span>${s.time}</span>${done ? "<em>✓ отправлена</em>" : ""}</button>`; }).join("")}</div>
+        <b>${s.label}</b><span>${s.time}</span>${done ? "<em>✓ готово</em>" : ""}</button>`; }).join("")}</div>
   </div>
   <form class="card" data-submit="report" novalidate>
     ${existing ? `<div class="msg ok">Сводка «${slot.label}» уже отправлена в ${timeStr(new Date(existing.at))}: ${fmt(existing.value,1)} л${morning ? ` за сутки, касса ${fmt(existing.cash)} ₽, в бочке ${fmt(existing.tank)} л` : " с 8:00"}. Если ошиблись — отправьте ещё раз с правильными цифрами.</div>` : ""}
@@ -518,9 +527,9 @@ function syncLine(){
 function calcHtml(b, morning){
   const v = parseNum(S.form.liters);
   if (!Number.isFinite(v) || !b.loSlot) return "";
-  if (v < b.lo) return `<div class="msg bad" role="alert">Меньше, чем в ${b.loSlot === "18" ? "18:00" : "22:00"} (${fmt(b.lo)} л). Литры смены с 8:00 не уменьшаются — проверьте цифры.</div>`;
+  if (v < b.lo) return `<div class="msg bad" role="alert">Меньше, чем в ${slotOf(b.loSlot).time} (${fmt(b.lo)} л). Литры смены с 8:00 не уменьшаются — проверьте цифры.</div>`;
   if (b.hi != null && v > b.hi) return `<div class="msg bad" role="alert">Больше, чем в следующей сводке (${fmt(b.hi)} л). Проверьте цифры.</div>`;
-  return `<div class="calc ok"><span>${b.loSlot === "18" ? "С 18:00 продано" : "С 22:00 продано"}</span><span class="v">${fmt(v - b.lo,1)} л</span></div>`;
+  return `<div class="calc ok"><span>С ${slotOf(b.loSlot).time} продано</span><span class="v">${fmt(v - b.lo,1)} л</span></div>`;
 }
 function updateCalc(){
   const st = S.stations.find(s => s.id === S.sid); const el = document.getElementById("calc"); if (!st || !el) return;
@@ -616,9 +625,9 @@ function detailView(){
   const rows = [], mrows = [];
   for (let i = 0; i < 7; i++){
     const d = shiftDate(today, -i), next = shiftDate(d, 1);
-    const r18 = rs.find(x => x.date === d && x.slot === "18"), r22 = rs.find(x => x.date === d && x.slot === "22"), r08 = rs.find(x => x.date === next && x.slot === "08");
-    const tot = r08 ? r08.value : (r22 || r18) ? (r22 || r18).value : null;
-    rows.push(`<tr><td>${i === 0 ? "Сегодня" : esc(dayShort(d))}</td>${cell(r18)}${cell(r22)}${cell(r08)}<td class="num tot">${tot == null ? "—" : fmt(tot) + (r08 ? "" : "…")}</td></tr>`);
+    const r14 = rs.find(x => x.date === d && x.slot === "14"), r18 = rs.find(x => x.date === d && x.slot === "18"), r22 = rs.find(x => x.date === d && x.slot === "22"), r08 = rs.find(x => x.date === next && x.slot === "08");
+    const last = r22 || r18 || r14, tot = r08 ? r08.value : last ? last.value : null;
+    rows.push(`<tr><td>${i === 0 ? "Сегодня" : esc(dayShort(d))}</td>${cell(r14)}${cell(r18)}${cell(r22)}${cell(r08)}<td class="num tot">${tot == null ? "—" : fmt(tot) + (r08 ? "" : "…")}</td></tr>`);
   }
   rs.filter(x => x.slot === "08").sort((a,b) => a.date < b.date ? 1 : -1).slice(0, 7).forEach(m => {
     const diff = m.diff != null ? Math.round(m.diff) : null;
@@ -630,7 +639,7 @@ function detailView(){
   <h1 style="font-size:28px">${esc(st.name)}</h1>
   ${tankBlock(st)}
   <div class="card"><div class="label">Продажи по сменам, литры</div>
-    <div class="tbl-wrap"><table><thead><tr><th>Сутки с 8:00</th><th>8–18</th><th>18–22</th><th>22–8</th><th>Всего</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Сутки с 8:00</th><th>8–14</th><th>14–18</th><th>18–22</th><th>22–8</th><th>Всего</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>
     <div class="hint">«…» — сутки ещё не закрыты утренней сводкой.</div></div>
   <div class="card"><div class="label">Утренние сводки</div>
     ${mrows.length ? `<div class="tbl-wrap"><table><thead><tr><th>Утро</th><th>Бочка, л</th><th>Расчёт</th><th>Разница</th><th>Касса, ₽</th></tr></thead><tbody>${mrows.join("")}</tbody></table></div>
@@ -684,7 +693,7 @@ function settingsView(){
       <div>Телефонов владельца: <b>${fmt(s.ownerPhones || 0)}</b></div>
       ${(s.phones || []).map(p => `<div>${esc(p.name)}: <b>${p.count ? fmt(p.count) + " тел." : "нет телефонов"}</b></div>`).join("")}
     </div>
-    <p class="hint" style="margin:0">Операторы получают напоминание в 8:00, 18:00 и 22:00 и ещё одно через 30 минут, если сводки нет. Вам через 45 минут приходит сводка по всем заправкам.</p>
+    <p class="hint" style="margin:0">Операторы получают напоминание в 8:00, 14:00, 18:00 и 22:00 и ещё одно через 30 минут, если сводки нет. Вам через 45 минут приходит сводка по всем заправкам.</p>
   </div>
   <div class="card"><div class="label">Почта</div>
     <label class="toggle"><input type="checkbox" id="emailOn" data-act="email" ${s.emailOn ? "checked" : ""}><span>Дублировать сводки и тревоги на ${esc(s.email || "почту")}</span></label>
@@ -860,8 +869,9 @@ const Demo = {
     for (const st of this.st){
       for (let i = 7; i >= 0; i--){
         const d = shiftDate(today, -i), next = shiftDate(d, 1), t0 = parseDate(d).getTime();
-        const c18 = Math.round(500 + rnd() * 300), c22 = c18 + Math.round(200 + rnd() * 150), tot = c22 + Math.round(100 + rnd() * 150);
+        const c14 = Math.round(250 + rnd() * 150), c18 = c14 + Math.round(250 + rnd() * 150), c22 = c18 + Math.round(200 + rnd() * 150), tot = c22 + Math.round(100 + rnd() * 150);
         const push = (date, slot, value, at, extra) => { if (at < Date.now()) this.rep.push({ key: `${date}_${slot}`, sid: st.id, date, slot, value, at, ...extra }); };
+        push(d, "14", c14, t0 + 14*3600000 + 300000);
         push(d, "18", c18, t0 + 18*3600000 + 300000);
         push(d, "22", c22, t0 + 22*3600000 + 300000);
         if (!(i === 1 && st.id === "d2")) push(next, "08", tot, t0 + 32*3600000 + 300000, { tank: null, cash: Math.round(30000 + rnd() * 40000) });
